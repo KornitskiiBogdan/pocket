@@ -43,7 +43,7 @@ export function Import() {
       <p className="eyebrow">Импорт</p>
       <h1>Быстро в колоду</h1>
       <p className="lead">
-        Список вида «слово — предложение» или абзац, в котором нажимаете незнакомое.
+        Список «слово — предложение», словарь «слово на строке, определение под ним» или абзац, в котором нажимаете незнакомое.
         В повтор сегодня попадёт не больше {settings.dailyNewLimit} новых, остальные подождут.
       </p>
       <div className="segmented" role="tablist">
@@ -69,7 +69,7 @@ export function Import() {
               spellCheck={false}
               autoCapitalize="off"
               autoCorrect="off"
-              placeholder={'reluctant — She was reluctant to leave.\ngive up — I will not give up.\noutcome'}
+              placeholder={'octopus\nsea animal with eight tentacles\n\nreluctant — She was reluctant to leave.\noutcome'}
             />
           </label>
           <button className="primary" type="button" disabled={working || !text.trim()} onClick={submitLines}>

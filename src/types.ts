@@ -96,4 +96,6 @@ export interface Settings {
 export interface Draft {
   term: string
   sentence: string
+  /** English definition from a vocabulary list. Guides the translation; it is not shown as the example sentence. */
+  gloss?: string
 }

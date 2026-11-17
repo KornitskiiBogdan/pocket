@@ -7,8 +7,8 @@ describe('parseLines', () => {
       reluctant — She was reluctant to leave.
       give up - I will not give up.
       outcome: The outcome surprised us.
-      1. nudge
       This line is a whole paragraph without a separator so it should be skipped entirely.
+      1. nudge
     `)
     expect(skipped).toHaveLength(1)
     expect(drafts).toEqual([
@@ -16,6 +16,38 @@ describe('parseLines', () => {
       { term: 'give up', sentence: 'I will not give up.' },
       { term: 'outcome', sentence: 'The outcome surprised us.' },
       { term: 'nudge', sentence: '' },
+    ])
+  })
+
+  it('reads a vocabulary list as term plus definition', () => {
+    const { drafts, skipped } = parseLines(`
+octopus
+sea animal with a soft body and eight tentacles
+
+threat
+danger to someting
+
+pollution
+harmful substances or energy released into the environment
+
+single-use plastic
+plastic that you use just once and then you throw it away
+`)
+    expect(skipped).toEqual([])
+    expect(drafts).toEqual([
+      { term: 'octopus', sentence: '', gloss: 'sea animal with a soft body and eight tentacles' },
+      { term: 'threat', sentence: '', gloss: 'danger to someting' },
+      { term: 'pollution', sentence: '', gloss: 'harmful substances or energy released into the environment' },
+      { term: 'single-use plastic', sentence: '', gloss: 'plastic that you use just once and then you throw it away' },
+    ])
+  })
+
+  it('does not pair a plain word list', () => {
+    const { drafts } = parseLines('octopus\nthreat\npollution')
+    expect(drafts).toEqual([
+      { term: 'octopus', sentence: '' },
+      { term: 'threat', sentence: '' },
+      { term: 'pollution', sentence: '' },
     ])
   })
 })

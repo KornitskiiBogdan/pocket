@@ -40,12 +40,12 @@ export function localImagePrompt(term: string, sentence: string): string {
 }
 
 export async function enrich(
-  items: { term: string; sentence: string }[],
+  items: { term: string; sentence: string; gloss?: string }[],
   settings: Settings,
   onProgress?: (done: number, total: number) => void,
 ): Promise<Enriched[]> {
   const size = 6
-  const chunks: { term: string; sentence: string }[][] = []
+  const chunks: { term: string; sentence: string; gloss?: string }[][] = []
   for (let index = 0; index < items.length; index += size) chunks.push(items.slice(index, index + size))
   const results: Enriched[][] = new Array(chunks.length)
   let done = 0
@@ -216,14 +216,14 @@ export async function pingKey(settings: Settings): Promise<void> {
   await generate(settings, 'Reply with exactly: ok', null)
 }
 
-async function enrichChunk(items: { term: string; sentence: string }[], settings: Settings): Promise<Enriched[]> {
+async function enrichChunk(items: { term: string; sentence: string; gloss?: string }[], settings: Settings): Promise<Enriched[]> {
   const prompt = `You create Russian glosses for an English learner moving from B1 to B2.
 Return JSON with a "cards" array of the same length and order as the input.
 For each item:
 - term: copy the input term exactly
 - partOfSpeech: a short Russian label, one of: сущ., гл., прил., нареч., местоим., предл., союз, фраза
-- translation: a short natural Russian translation of the term only, not of the whole sentence
-- sentence: if the input sentence is non-empty, copy it exactly. If it is empty, write ONE clear English sentence at B1–B2 level that contains the term exactly as written
+- translation: a short natural Russian translation of the term only, not of the whole sentence. If "gloss" is present, it is the English definition and decides the meaning
+- sentence: if the input sentence is non-empty, copy it exactly. If it is empty, write ONE clear English sentence at B1–B2 level that contains the term exactly as written. Never copy "gloss" into the sentence
 - sentenceTranslation: a natural Russian translation of that sentence
 - imagePrompt: one English sentence describing a simple concrete scene that makes the term's meaning obvious. No text in the scene.
 - abstract: true if a photo found by searching the term itself would NOT show the meaning: feelings, attitudes, qualities, ideas, abstract verbs and linking phrases (e.g. "reluctant", "outcome", "tend to", "get round to", "nevertheless"). false for things, people, places and visible actions (e.g. "bridesmaid", "plastic bag", "doze off").

@@ -195,7 +195,7 @@ export function DeckProvider({ children }: { children: ReactNode }) {
         continue
       }
       seen.add(key)
-      fresh.push({ term, sentence })
+      fresh.push({ term, sentence, gloss: draft.gloss?.trim() })
     }
     if (!fresh.length) {
       toast(dupes ? 'Такие карточки уже есть' : 'Нечего добавлять')
@@ -208,9 +208,10 @@ export function DeckProvider({ children }: { children: ReactNode }) {
 
     busy.current = true
     const started = Date.now()
+    const keepGloss = !settingsRef.current.apiKey
     let skeletons = fresh.map((draft, index) => createCard({
       term: draft.term,
-      sentence: draft.sentence,
+      sentence: draft.sentence || (keepGloss ? draft.gloss ?? '' : ''),
       source,
       createdAt: started + index,
       now: started,

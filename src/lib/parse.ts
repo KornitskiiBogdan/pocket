@@ -3,33 +3,51 @@ import type { Draft } from '../types'
 export function parseLines(text: string): { drafts: Draft[]; skipped: string[] } {
   const drafts: Draft[] = []
   const skipped: string[] = []
-  for (const raw of text.split(/\r?\n/)) {
-    const line = raw.trim()
-    if (!line) continue
-    const stripped = line.replace(/^(?:[-*•]+|\d+[.)])\s+/, '').trim()
-    const tabs = stripped.split('\t').map((part) => part.trim()).filter(Boolean)
-    if (tabs.length >= 2) {
-      drafts.push({ term: tabs[0], sentence: tabs.slice(1).join(' ') })
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim().replace(/^(?:[-*•]+|\d+[.)])\s+/, '').trim())
+    .filter(Boolean)
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index]
+    const next = lines[index + 1]
+    if (next && isHeadword(line) && isGloss(next)) {
+      drafts.push({ term: line, sentence: '', gloss: next })
+      index += 1
       continue
     }
-    const separated =
-      stripped.match(/^(.{1,80}?)\s*(?:—|–|\|)\s*(.+)$/) ||
-      stripped.match(/^(.{1,80}?)\s+-\s+(.+)$/) ||
-      stripped.match(/^(.{1,40}?):\s+(.+)$/)
+    const separated = splitEntry(line)
     if (separated) {
-      const term = separated[1].trim()
-      const sentence = separated[2].trim()
-      if (term && sentence) drafts.push({ term, sentence })
-      else skipped.push(line)
+      drafts.push(separated)
       continue
     }
-    if (stripped.length > 60) {
+    if (line.length > 60) {
       skipped.push(line)
       continue
     }
-    drafts.push({ term: stripped, sentence: '' })
+    drafts.push({ term: line, sentence: '' })
   }
   return { drafts, skipped }
+}
+
+function isHeadword(line: string): boolean {
+  return line.length <= 50 && line.split(/\s+/).length <= 6 && !/[.!?]$/.test(line) && !splitEntry(line)
+}
+
+function isGloss(line: string): boolean {
+  return !splitEntry(line) && (line.includes(' ') || line.length > 20)
+}
+
+function splitEntry(line: string): Draft | null {
+  const tabs = line.split('\t').map((part) => part.trim()).filter(Boolean)
+  if (tabs.length >= 2) return { term: tabs[0], sentence: tabs.slice(1).join(' ') }
+  const separated =
+    line.match(/^(.{1,80}?)\s*(?:—|–|\|)\s*(.+)$/) ||
+    line.match(/^(.{1,80}?)\s+-\s+(.+)$/) ||
+    line.match(/^(.{1,40}?):\s+(.+)$/)
+  if (!separated) return null
+  const term = separated[1].trim()
+  const sentence = separated[2].trim()
+  return term && sentence ? { term, sentence } : null
 }
 
 export interface PassageWord {
