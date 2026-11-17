@@ -26,10 +26,9 @@ const SCHEMA = {
           sentence: { type: 'string' },
           sentenceTranslation: { type: 'string' },
           imagePrompt: { type: 'string' },
-          imageQuery: { type: 'string' },
           abstract: { type: 'boolean' },
         },
-        required: ['term', 'partOfSpeech', 'translation', 'sentence', 'sentenceTranslation', 'imagePrompt', 'imageQuery', 'abstract'],
+        required: ['term', 'partOfSpeech', 'translation', 'sentence', 'sentenceTranslation', 'imagePrompt', 'abstract'],
       },
     },
   },
@@ -227,8 +226,7 @@ For each item:
 - sentence: if the input sentence is non-empty, copy it exactly. If it is empty, write ONE clear English sentence at B1–B2 level that contains the term exactly as written
 - sentenceTranslation: a natural Russian translation of that sentence
 - imagePrompt: one English sentence describing a simple concrete scene that makes the term's meaning obvious. No text in the scene.
-- imageQuery: 2-4 plain English keywords for a stock photo search that would show this meaning, concrete nouns and actions only (e.g. "man sleeping sofa" for "doze off"). Never just repeat an abstract term.
-- abstract: true if an ordinary stock photo found by those keywords would NOT make the meaning clear: feelings, attitudes, qualities, ideas, abstract verbs and linking phrases (e.g. "reluctant", "outcome", "tend to", "get round to", "nevertheless"). false for things, people, places and visible actions (e.g. "bridesmaid", "plastic bag", "doze off").
+- abstract: true if a photo found by searching the term itself would NOT show the meaning: feelings, attitudes, qualities, ideas, abstract verbs and linking phrases (e.g. "reluctant", "outcome", "tend to", "get round to", "nevertheless"). false for things, people, places and visible actions (e.g. "bridesmaid", "plastic bag", "doze off").
 
 Input:
 ${JSON.stringify(items)}`
@@ -257,7 +255,7 @@ function blend(item: { term: string; sentence: string }, raw: unknown): Enriched
     sentence,
     sentenceTranslation: clip(ai.sentenceTranslation, 400),
     imagePrompt: clip(ai.imagePrompt, 500) || localImagePrompt(item.term, sentence),
-    imageQuery: clip(ai.imageQuery, 80) || item.term,
+    imageQuery: item.term,
     abstract: ai.abstract === true,
   }
 }

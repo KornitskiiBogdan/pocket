@@ -52,7 +52,7 @@ export async function findPhoto(query: string): Promise<{ image: string; credit:
 }
 
 async function openverse(query: string, count: number): Promise<PhotoHit[]> {
-  const params = new URLSearchParams({ q: query, page_size: String(count), mature: 'false', aspect_ratio: 'square,wide' })
+  const params = new URLSearchParams({ q: query, page_size: String(count), mature: 'false' })
   const response = await fetch(`https://api.openverse.org/v1/images/?${params}`)
   if (!response.ok) return []
   const data = (await response.json()) as { results?: { thumbnail?: string; creator?: string; license?: string }[] }
@@ -71,7 +71,7 @@ async function wikimedia(query: string, count: number): Promise<PhotoHit[]> {
     origin: '*',
     generator: 'search',
     gsrnamespace: '6',
-    gsrsearch: `${query} filetype:bitmap`,
+    gsrsearch: query,
     gsrlimit: String(count),
     prop: 'imageinfo',
     iiprop: 'url|extmetadata',

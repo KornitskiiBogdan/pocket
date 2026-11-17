@@ -6,7 +6,7 @@ import { fetchPhoto, searchPhotos, type PhotoHit } from '../lib/photos'
 
 export function PhotoPicker({ card }: { card: Card }) {
   const { attachImage, settings, toast } = useDeck()
-  const [query, setQuery] = useState(card.imageQuery || card.term)
+  const [query, setQuery] = useState(card.term)
   const [hits, setHits] = useState<PhotoHit[] | null>(null)
   const [searching, setSearching] = useState(false)
   const [taking, setTaking] = useState<string | null>(null)

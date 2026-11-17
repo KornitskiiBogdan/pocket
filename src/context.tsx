@@ -462,7 +462,7 @@ async function pictureFor(card: Card, settings: Settings): Promise<{ image: stri
       else if (settings.imageSource === 'gemini') throw error
     }
   }
-  return findPhoto(card.imageQuery || card.term)
+  return findPhoto(card.term)
 }
 
 function replaceCards(current: Card[], updates: Card[]) {
