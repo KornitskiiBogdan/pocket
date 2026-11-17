@@ -7,6 +7,7 @@ export function createCard(input: {
   source?: string
   partOfSpeech?: string
   translation?: string
+  definition?: string
   sentenceTranslation?: string
   imagePrompt?: string
   createdAt?: number
@@ -18,6 +19,7 @@ export function createCard(input: {
     term: input.term.trim(),
     partOfSpeech: input.partOfSpeech?.trim() ?? '',
     translation: input.translation?.trim() ?? '',
+    definition: input.definition?.trim() ?? '',
     sentence: input.sentence?.trim() ?? '',
     sentenceTranslation: input.sentenceTranslation?.trim() ?? '',
     source: input.source?.trim() ?? '',

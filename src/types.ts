@@ -21,6 +21,8 @@ export interface Card {
   term: string
   partOfSpeech: string
   translation: string
+  /** English explanation from a vocabulary list. Empty when the card has none. */
+  definition: string
   sentence: string
   sentenceTranslation: string
   source: string

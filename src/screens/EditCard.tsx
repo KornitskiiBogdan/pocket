@@ -12,6 +12,7 @@ export function EditCard({ id }: { id: string }) {
   const [term, setTerm] = useState(card?.term ?? '')
   const [partOfSpeech, setPartOfSpeech] = useState(card?.partOfSpeech ?? '')
   const [translation, setTranslation] = useState(card?.translation ?? '')
+  const [definition, setDefinition] = useState(card?.definition ?? '')
   const [sentence, setSentence] = useState(card?.sentence ?? '')
   const [sentenceTranslation, setSentenceTranslation] = useState(card?.sentenceTranslation ?? '')
   const [source, setSource] = useState(card?.source ?? '')
@@ -21,6 +22,7 @@ export function EditCard({ id }: { id: string }) {
     setTerm(card.term)
     setPartOfSpeech(card.partOfSpeech)
     setTranslation(card.translation)
+    setDefinition(card.definition)
     setSentence(card.sentence)
     setSentenceTranslation(card.sentenceTranslation)
     setSource(card.source)
@@ -30,9 +32,10 @@ export function EditCard({ id }: { id: string }) {
     if (!card) return
     setPartOfSpeech((value) => value || card.partOfSpeech)
     setTranslation((value) => value || card.translation)
+    setDefinition((value) => value || card.definition)
     setSentence((value) => value || card.sentence)
     setSentenceTranslation((value) => value || card.sentenceTranslation)
-  }, [card?.partOfSpeech, card?.translation, card?.sentence, card?.sentenceTranslation])
+  }, [card?.partOfSpeech, card?.translation, card?.definition, card?.sentence, card?.sentenceTranslation])
 
   if (!card) {
     return (
@@ -55,6 +58,7 @@ export function EditCard({ id }: { id: string }) {
       term: nextTerm,
       partOfSpeech: partOfSpeech.trim(),
       translation: translation.trim(),
+      definition: definition.trim(),
       sentence: sentence.trim(),
       sentenceTranslation: sentenceTranslation.trim(),
       source: source.trim(),
@@ -77,6 +81,10 @@ export function EditCard({ id }: { id: string }) {
         <label className="field"><span>Часть речи</span><input value={partOfSpeech} onChange={(event) => setPartOfSpeech(event.target.value)} /></label>
         <label className="field"><span>Перевод</span><input value={translation} onChange={(event) => setTranslation(event.target.value)} /></label>
       </div>
+      <label className="field">
+        <span>Объяснение по-английски</span>
+        <textarea value={definition} onChange={(event) => setDefinition(event.target.value)} />
+      </label>
       <label className="field">
         <span>Предложение</span>
         <textarea value={sentence} onChange={(event) => setSentence(event.target.value)} />

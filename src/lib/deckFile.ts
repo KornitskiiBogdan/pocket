@@ -90,6 +90,7 @@ export function normalizeCard(item: unknown): Card | null {
     term: raw.term.trim(),
     partOfSpeech: stringField(raw.partOfSpeech),
     translation: stringField(raw.translation),
+    definition: stringField(raw.definition),
     sentence: stringField(raw.sentence),
     sentenceTranslation: stringField(raw.sentenceTranslation),
     source: stringField(raw.source),

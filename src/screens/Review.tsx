@@ -172,6 +172,7 @@ export function Review() {
             <>
               <h2 className="term">{current.term}</h2>
               <p className="gloss">{[current.partOfSpeech, current.translation].filter(Boolean).join(' · ') || 'без перевода'}</p>
+              {current.definition && <p className="definition">{current.definition}</p>}
               {current.sentence && (
                 <p className="sentence back-sentence"><MarkTerm sentence={current.sentence} term={current.term} /></p>
               )}

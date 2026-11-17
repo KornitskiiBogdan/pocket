@@ -208,10 +208,10 @@ export function DeckProvider({ children }: { children: ReactNode }) {
 
     busy.current = true
     const started = Date.now()
-    const keepGloss = !settingsRef.current.apiKey
     let skeletons = fresh.map((draft, index) => createCard({
       term: draft.term,
-      sentence: draft.sentence || (keepGloss ? draft.gloss ?? '' : ''),
+      sentence: draft.sentence,
+      definition: draft.gloss,
       source,
       createdAt: started + index,
       now: started,

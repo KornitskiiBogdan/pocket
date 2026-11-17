@@ -235,6 +235,7 @@ textarea { min-height: 140px; resize: vertical; line-height: 1.45; font-weight: 
 }
 .term { font-size: 36px; margin: 8px 0 0; }
 .gloss { font-weight: 700; margin: 4px 0 8px; }
+.definition { margin: 0 0 8px; color: var(--muted); font-size: 16px; line-height: 1.4; }
 .back-sentence { font-size: 22px; }
 mark { background: #e3f5ec; color: inherit; border-radius: 6px; padding: 0 0.15em; }
 .translation { color: var(--muted); margin-top: 0; }
