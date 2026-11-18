@@ -26,6 +26,12 @@ export function basicAuthorization(key: string): string {
   return `Basic ${trimmed}`
 }
 
+/** An access token from the cabinet starts with eyJ. The browser can send it directly and skip port 9443. */
+export function directAccessToken(key: string): string | null {
+  const raw = key.trim().replace(/^(bearer|basic)\s+/i, '')
+  return raw.startsWith('eyJ') ? raw : null
+}
+
 export function expiryMs(value: unknown, now = Date.now()): number {
   const stamp = typeof value === 'number' ? value : Number(value)
   if (!Number.isFinite(stamp) || stamp <= 0) return now + 25 * 60_000
@@ -97,6 +103,8 @@ async function completeNow(prompt: string, settings: Settings, model: string, sc
 }
 
 async function accessToken(key: string, force = false): Promise<string> {
+  const direct = directAccessToken(key)
+  if (direct) return direct
   const auth = basicAuthorization(key)
   if (!auth.replace(/^Basic\s+/i, '').trim()) throw new GigaChatError('Нет ключа GigaChat')
   const now = Date.now()
@@ -131,7 +139,7 @@ function modelOf(settings: Settings, tier: 'smart' | 'fast'): string {
 }
 
 function unreachable(): GigaChatError {
-  return new GigaChatError('Браузер не дошёл до GigaChat. Нужен сертификат Минцифры или Яндекс Браузер.')
+  return new GigaChatError('Браузер не открывает обмен ключа на порту 9443. Вставьте токен доступа из кабинета: он начинается с eyJ и действует 30 минут.')
 }
 
 function httpError(status: number, schema: boolean): GigaChatError {

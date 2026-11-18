@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { basicAuthorization, contentFrom, expiryMs } from './gigachat'
+import { basicAuthorization, contentFrom, directAccessToken, expiryMs } from './gigachat'
 import { DEFAULT_SETTINGS, textModel } from './settings'
 
 describe('basicAuthorization', () => {
@@ -7,6 +7,14 @@ describe('basicAuthorization', () => {
     expect(basicAuthorization('abc')).toBe('Basic abc')
     expect(basicAuthorization('Basic abc')).toBe('Basic abc')
     expect(basicAuthorization('basic abc')).toBe('Basic abc')
+  })
+})
+
+describe('directAccessToken', () => {
+  it('uses a cabinet access token as-is and ignores an authorization key', () => {
+    expect(directAccessToken('eyJhbGci.payload.sig')).toBe('eyJhbGci.payload.sig')
+    expect(directAccessToken('Bearer eyJhbGci.payload.sig')).toBe('eyJhbGci.payload.sig')
+    expect(directAccessToken('NmYwYjEyOTE')).toBeNull()
   })
 })
 
