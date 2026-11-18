@@ -3,9 +3,10 @@ import type { Direction, ImageSource } from '../types'
 import { useDeck } from '../context'
 import { formatMinutes, plural } from '../lib/format'
 import { formatBytes, isInstalled, storageStatus, type StorageStatus } from '../lib/storage'
-import { drawnThisMonth, pingKey } from '../lib/gemini'
+import { pingGigaChat } from '../lib/gigachat'
+import { kandinskyDrawnThisMonth, pingKandinsky } from '../lib/kandinsky'
 import { LADDER_MINUTES } from '../lib/srs'
-import { clampGoal, clampLimit, currentModel, DEFAULT_SETTINGS } from '../lib/settings'
+import { clampGoal, clampLimit, DEFAULT_SETTINGS, textModel } from '../lib/settings'
 
 const DIRECTIONS: { id: Direction; label: string; hint: string }[] = [
   { id: 'mix', label: 'Чередовать', hint: 'После каждого удачного ответа карточка меняет сторону: то пропуск в английском, то русская фраза, которую нужно сказать по-английски.' },
@@ -14,9 +15,8 @@ const DIRECTIONS: { id: Direction; label: string; hint: string }[] = [
 ]
 
 const IMAGE_SOURCES: { id: ImageSource; label: string; hint: string }[] = [
-  { id: 'smart', label: 'Фото + Gemini', hint: 'Конкретные слова (bridesmaid, plastic bag) получают бесплатное фото, абстрактные (reluctant, outcome) рисует Gemini. Обычно это треть слов, около $0,03 за картинку. Без оплаты ключа абстрактные тоже получат фото.' },
+  { id: 'smart', label: 'Фото + рисунок', hint: 'Конкретные слова получают бесплатное фото. Абстрактные рисует Kandinsky, если ниже указаны его ключи: около 100 картинок в месяц. Без ключей абстрактные тоже получают фото.' },
   { id: 'photo', label: 'Только фото', hint: 'Бесплатно и быстро: фото ищется по самому слову в открытых библиотеках Openverse и Wikimedia. Если не подошло, в карточке можно вписать другой запрос.' },
-  { id: 'gemini', label: 'Всё рисует Gemini', hint: 'Рисует картинку под смысл каждого слова. Нужен платный тариф ключа, несколько секунд на карточку. Если квота закрыта, приложение возьмёт фото.' },
   { id: 'off', label: 'Без картинок', hint: 'Карточки без картинок. Свою можно добавить вручную в редактировании.' },
 ]
 
@@ -25,12 +25,12 @@ const BACKUP_DATE = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'l
 export function Settings() {
   const { cards, settings, updateSettings, importFile, toast, backup, backupAt } = useDeck()
   const [showKey, setShowKey] = useState(false)
-  const [checking, setChecking] = useState(false)
+  const [checking, setChecking] = useState<'giga' | 'kandinsky' | null>(null)
   const [replace, setReplace] = useState(false)
 
   const [storage, setStorage] = useState<StorageStatus | null>(null)
   const installed = isInstalled()
-  const drawn = drawnThisMonth()
+  const kandinskyDrawn = kandinskyDrawnThisMonth()
 
   useEffect(() => {
     void storageStatus().then(setStorage)
@@ -58,37 +58,37 @@ export function Settings() {
       <p className="eyebrow">Настройки</p>
       <h1>Ключ, ритм, файл</h1>
       <label className="field">
-        <span>Ключ Gemini</span>
+        <span>Ключ GigaChat</span>
         <input
           type={showKey ? 'text' : 'password'}
-          value={settings.apiKey}
+          value={settings.gigachatKey}
           autoComplete="off"
           spellCheck={false}
-          onChange={(event) => updateSettings({ ...settings, apiKey: event.target.value })}
-          placeholder="AIza..."
+          onChange={(event) => updateSettings({ ...settings, gigachatKey: event.target.value })}
+          placeholder="Authorization key"
         />
       </label>
-      <label className="check">
-        <input type="checkbox" checked={showKey} onChange={(event) => setShowKey(event.target.checked)} />
-        Показать ключ
-      </label>
-      <p className="hint">Ключ живёт только в этом браузере и в файл колоды не попадает. Если запрос блокируется, снимите ограничение ключа по сайту или добавьте этот адрес.</p>
+      <p className="hint">Этим ключом переводятся карточки и тексты, проверяются фразы. Он живёт только в этом браузере и в файл колоды не попадает. Нужен сертификат Минцифры или Яндекс Браузер, иначе запрос оборвётся до модели.</p>
       <div className="row-actions">
         <button
           className="ghost"
           type="button"
-          disabled={checking || !settings.apiKey.trim()}
+          disabled={checking !== null || !settings.gigachatKey.trim()}
           onClick={() => {
-            setChecking(true)
-            pingKey(settings)
-              .then(() => toast('Ключ отвечает'))
+            setChecking('giga')
+            pingGigaChat(settings)
+              .then(() => toast('GigaChat отвечает'))
               .catch((error: Error) => toast(error.message))
-              .finally(() => setChecking(false))
+              .finally(() => setChecking(null))
           }}
         >
-          {checking ? 'Проверяю…' : 'Проверить ключ'}
+          {checking === 'giga' ? 'Проверяю…' : 'Проверить GigaChat'}
         </button>
       </div>
+      <label className="check">
+        <input type="checkbox" checked={showKey} onChange={(event) => setShowKey(event.target.checked)} />
+        Показать ключ
+      </label>
       <label className="field">
         <span>Новых карточек в день</span>
         <input
@@ -145,9 +145,48 @@ export function Settings() {
           ))}
         </div>
         <p className="hint">{IMAGE_SOURCES.find((item) => item.id === settings.imageSource)?.hint}</p>
-        {drawn.count > 0 && (
+        <label className="field">
+          <span>API-ключ Kandinsky</span>
+          <input
+            type={showKey ? 'text' : 'password'}
+            value={settings.kandinskyKey}
+            autoComplete="off"
+            spellCheck={false}
+            onChange={(event) => updateSettings({ ...settings, kandinskyKey: event.target.value })}
+            placeholder="Key из FusionBrain"
+          />
+        </label>
+        <label className="field">
+          <span>Секрет Kandinsky</span>
+          <input
+            type={showKey ? 'text' : 'password'}
+            value={settings.kandinskySecret}
+            autoComplete="off"
+            spellCheck={false}
+            onChange={(event) => updateSettings({ ...settings, kandinskySecret: event.target.value })}
+            placeholder="Secret из FusionBrain"
+          />
+        </label>
+        <p className="hint">Два ключа из кабинета FusionBrain. В режиме «Фото + рисунок» Kandinsky рисует только абстрактные слова, около 100 картинок в месяц. Оба ключа остаются в этом браузере и в файл колоды не попадают.</p>
+        <div className="row-actions">
+          <button
+            className="ghost"
+            type="button"
+            disabled={checking !== null || !settings.kandinskyKey.trim() || !settings.kandinskySecret.trim()}
+            onClick={() => {
+              setChecking('kandinsky')
+              pingKandinsky(settings)
+                .then((message) => toast(message))
+                .catch((error: Error) => toast(error.message))
+                .finally(() => setChecking(null))
+            }}
+          >
+            {checking === 'kandinsky' ? 'Проверяю…' : 'Проверить Kandinsky'}
+          </button>
+        </div>
+        {kandinskyDrawn.count > 0 && (
           <p className="hint">
-            В этом месяце Gemini нарисовал {drawn.count} {plural(drawn.count, 'картинку', 'картинки', 'картинок')}, примерно ${drawn.usd.toFixed(2)}.
+            В этом месяце Kandinsky нарисовал {kandinskyDrawn.count} {plural(kandinskyDrawn.count, 'картинку', 'картинки', 'картинок')}.
           </p>
         )}
       </div>
@@ -155,15 +194,11 @@ export function Settings() {
         <summary>Модели</summary>
         <label className="field">
           <span>Перевод карточек (быстрая)</span>
-          <input value={currentModel(settings.fastModel, DEFAULT_SETTINGS.fastModel)} onChange={(event) => updateSettings({ ...settings, fastModel: event.target.value.trim() })} />
+          <input value={textModel(settings.fastModel, DEFAULT_SETTINGS.fastModel)} onChange={(event) => updateSettings({ ...settings, fastModel: event.target.value.trim() })} />
         </label>
         <label className="field">
           <span>Проверка фраз и тексты (умная)</span>
-          <input value={currentModel(settings.textModel, DEFAULT_SETTINGS.textModel)} onChange={(event) => updateSettings({ ...settings, textModel: event.target.value.trim() })} />
-        </label>
-        <label className="field">
-          <span>Картинка</span>
-          <input value={currentModel(settings.imageModel, DEFAULT_SETTINGS.imageModel)} onChange={(event) => updateSettings({ ...settings, imageModel: event.target.value.trim() })} />
+          <input value={textModel(settings.textModel, DEFAULT_SETTINGS.textModel)} onChange={(event) => updateSettings({ ...settings, textModel: event.target.value.trim() })} />
         </label>
       </details>
 
@@ -199,7 +234,7 @@ export function Settings() {
           <strong>{backupAt ? `Копия от ${BACKUP_DATE.format(backupAt)}` : 'Копий ещё не было'}</strong>
           <span>
             {storage?.usage ? `Занято ${formatBytes(storage.usage)}. ` : ''}
-            Копия — один JSON с карточками, картинками, текстами и временем по дням. Ключ Gemini в неё не попадает.
+            Копия — один JSON с карточками, картинками, текстами и временем по дням. Ключи GigaChat и Kandinsky в неё не попадают.
           </span>
         </li>
       </ul>

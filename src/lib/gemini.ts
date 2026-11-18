@@ -1,6 +1,6 @@
 import type { Settings } from '../types'
-import { shrinkDataUrl } from './image'
-import { currentModel, DEFAULT_SETTINGS } from './settings'
+import { complete } from './gigachat'
+import { DEFAULT_SETTINGS, textModel } from './settings'
 
 export interface Enriched {
   partOfSpeech: string
@@ -62,66 +62,7 @@ export async function enrich(
   return results.flat()
 }
 
-const ENRICH_PARALLEL = 3
-
-/** The free tier serves zero image requests a day, so retrying is pointless until billing is enabled. */
-export class ImageQuotaError extends Error {}
-
-export async function illustrate(prompt: string, settings: Settings): Promise<string> {
-  const text = `Create one illustration for a vocabulary flashcard. ${prompt}
-Square composition, one clear scene, soft natural light. No words, no letters, no numbers, no watermark, no caption.`
-  const body = {
-    model: currentModel(settings.imageModel, DEFAULT_SETTINGS.imageModel),
-    input: text,
-    store: false,
-  }
-  let data: Interaction
-  try {
-    data = await postInteraction(body, settings.apiKey)
-  } catch (error) {
-    if (isQuotaError(error)) throw new ImageQuotaError('Картинки Gemini недоступны на бесплатном тарифе ключа. Нужна оплата в AI Studio, либо выберите поиск фото в настройках.')
-    if (!(error instanceof GeminiError) || !error.busy) throw error
-    await new Promise((resolve) => window.setTimeout(resolve, 2500))
-    data = await postInteraction(body, settings.apiKey)
-  }
-  const url = extractImage(data)
-  if (!url) throw new Error('Gemini не вернул картинку')
-  countDrawing(body.model)
-  return shrinkDataUrl(url)
-}
-
-const DRAWN_KEY = 'pocket.drawn'
-
-/** USD per 1K image on the paid tier, November 2026. */
-const IMAGE_PRICES: Record<string, number> = {
-  'gemini-3.1-flash-lite-image': 0.034,
-  'gemini-nano-banana-2.1': 0.034,
-  'gemini-3.1-flash-image': 0.067,
-  'gemini-3-pro-image': 0.134,
-}
-
-interface DrawnLog { month: string; count: number; usd: number }
-
-function monthKey() {
-  const now = new Date()
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-}
-
-export function drawnThisMonth(): DrawnLog {
-  try {
-    const log = JSON.parse(localStorage.getItem(DRAWN_KEY) || 'null') as DrawnLog | null
-    if (log && log.month === monthKey()) return log
-  } catch {
-    // fall through to an empty month
-  }
-  return { month: monthKey(), count: 0, usd: 0 }
-}
-
-function countDrawing(model: string) {
-  const log = drawnThisMonth()
-  const price = IMAGE_PRICES[model] ?? 0.067
-  localStorage.setItem(DRAWN_KEY, JSON.stringify({ ...log, count: log.count + 1, usd: log.usd + price }))
-}
+const ENRICH_PARALLEL = 1
 
 export interface SentenceCheck {
   ok: boolean
@@ -216,7 +157,7 @@ Return JSON: "title" — a short English title, "paragraphs" — the paragraphs 
   const paragraphs = Array.isArray(raw.paragraphs)
     ? raw.paragraphs.filter((item): item is string => typeof item === 'string' && item.trim() !== '').map((item) => item.trim())
     : []
-  if (!paragraphs.length) throw new Error('Gemini не прислал текст')
+  if (!paragraphs.length) throw new Error('GigaChat не прислал текст')
   return { title: clip(raw.title, 120) || request.topic || 'Текст', body: paragraphs.join('\n\n') }
 }
 
@@ -253,12 +194,8 @@ ${JSON.stringify(paragraphs)}`
   const russian = Array.isArray(raw.paragraphs)
     ? raw.paragraphs.filter((item): item is string => typeof item === 'string' && item.trim() !== '').map((item) => item.trim())
     : []
-  if (!russian.length) throw new Error('Gemini не прислал перевод')
+  if (!russian.length) throw new Error('GigaChat не прислал перевод')
   return russian.join('\n\n')
-}
-
-export async function pingKey(settings: Settings): Promise<void> {
-  await generate(settings, 'Reply with exactly: ok', null)
 }
 
 async function enrichChunk(items: { term: string; sentence: string; gloss?: string }[], settings: Settings): Promise<Enriched[]> {
@@ -305,96 +242,9 @@ function blend(item: { term: string; sentence: string }, raw: unknown): Enriched
   }
 }
 
-const TEXT_FALLBACKS = ['gemini-3.6-flash', 'gemini-3.5-flash-lite']
-
 async function generate(settings: Settings, prompt: string, schema: object | null, tier: 'smart' | 'fast' = 'smart'): Promise<string> {
-  const body: Record<string, unknown> = { input: prompt, store: false }
-  if (schema) {
-    body.response_format = {
-      type: 'text',
-      mime_type: 'application/json',
-      schema,
-    }
-  }
-  const smart = currentModel(settings.textModel, DEFAULT_SETTINGS.textModel)
-  const fast = currentModel(settings.fastModel, DEFAULT_SETTINGS.fastModel)
-  const chain = tier === 'fast' ? [fast, 'gemini-3.6-flash', smart] : [smart, ...TEXT_FALLBACKS]
-  const models = chain.filter((model, index) => chain.indexOf(model) === index)
-  let lastError: unknown = null
-  for (const model of models) {
-    try {
-      const text = textOf(await postInteraction({ ...body, model }, settings.apiKey))
-      if (!text) throw new Error('Gemini вернул пустой ответ')
-      return text
-    } catch (error) {
-      lastError = error
-      if (!(error instanceof GeminiError) || !(error.busy || error.missingModel)) throw error
-    }
-  }
-  throw lastError instanceof GeminiError
-    ? new Error('Gemini сейчас перегружен. Попробуйте через минуту.')
-    : lastError
-}
-
-class GeminiError extends Error {
-  constructor(message: string, readonly status: number, readonly busy: boolean, readonly missingModel = false) {
-    super(message)
-  }
-}
-
-function isQuotaError(error: unknown): boolean {
-  return error instanceof GeminiError && error.status === 429 && /limit: 0|per day|free tier|quota/i.test(error.message)
-}
-
-async function postInteraction(body: unknown, apiKey: string): Promise<Interaction> {
-  if (!apiKey.trim()) throw new Error('Нет ключа Gemini')
-  let response: Response
-  try {
-    response = await fetch('https://generativelanguage.googleapis.com/v1beta/interactions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': apiKey.trim(),
-      },
-      body: JSON.stringify(body),
-    })
-  } catch {
-    throw new Error('Нет связи с Gemini. Проверьте интернет.')
-  }
-  const data = (await response.json().catch(() => ({}))) as Interaction
-  if (!response.ok) {
-    const busy = response.status === 429 || response.status === 500 || response.status === 503
-    const message = data.error?.message || `Ошибка Gemini (${response.status})`
-    const missingModel = response.status === 404 || (response.status === 400 && /model/i.test(message) && /not (found|available|supported)/i.test(message))
-    throw new GeminiError(message, response.status, busy, missingModel)
-  }
-  return data
-}
-
-function textOf(data: Interaction): string {
-  if (data.output_text?.trim()) return data.output_text.trim()
-  return steps(data)
-    .flatMap((step) => step.content ?? [])
-    .map((part) => part.text || '')
-    .join('')
-    .trim()
-}
-
-function extractImage(data: Interaction): string | null {
-  const direct = data.output_image
-  if (direct?.data) return dataUrl(direct.mime_type, direct.data)
-  for (const part of steps(data).flatMap((step) => step.content ?? [])) {
-    if (part.type === 'image' && part.data) return dataUrl(part.mime_type, part.data)
-  }
-  return null
-}
-
-function steps(data: Interaction) {
-  return (data.steps ?? []).filter((step) => step.type === 'model_output' || !step.type)
-}
-
-function dataUrl(mime: string | undefined, data: string) {
-  return `data:${mime || 'image/png'};base64,${data}`
+  const model = textModel(tier === 'fast' ? settings.fastModel : settings.textModel, tier === 'fast' ? DEFAULT_SETTINGS.fastModel : DEFAULT_SETTINGS.textModel)
+  return complete(prompt, settings, model, schema)
 }
 
 function parseJson(text: string): unknown {
@@ -404,19 +254,4 @@ function parseJson(text: string): unknown {
 
 function clip(value: unknown, max: number): string {
   return typeof value === 'string' ? value.trim().slice(0, max) : ''
-}
-
-interface Interaction {
-  error?: { message?: string }
-  output_text?: string
-  output_image?: { data?: string; mime_type?: string }
-  steps?: {
-    type?: string
-    content?: {
-      type?: string
-      text?: string
-      data?: string
-      mime_type?: string
-    }[]
-  }[]
 }

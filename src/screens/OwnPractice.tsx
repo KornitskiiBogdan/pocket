@@ -37,8 +37,8 @@ export function OwnPractice({ card }: { card: Card }) {
   const check = async () => {
     const sentence = text.trim()
     if (!sentence) return
-    if (!settings.apiKey) {
-      setFailure('Для проверки нужен ключ Gemini в настройках')
+    if (!settings.gigachatKey) {
+      setFailure('Для проверки нужен ключ GigaChat в настройках')
       return
     }
     setChecking(true)

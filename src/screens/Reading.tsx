@@ -10,7 +10,7 @@ import { LEARNED_MINUTES } from '../lib/stats'
 const ORIGIN_LABEL: Record<TextOrigin, string> = {
   mine: 'свой',
   bbc: '6 Minute English',
-  ai: 'Gemini',
+  ai: 'GigaChat',
   starter: 'стартовый',
 }
 
@@ -34,7 +34,7 @@ function Library() {
         <a className="primary" href="#/read/new">Добавить текст</a>
       </div>
       {sorted.length === 0 ? (
-        <p className="lead">Пока пусто. Вставьте выпуск 6 Minute English или попросите Gemini написать текст.</p>
+        <p className="lead">Пока пусто. Вставьте выпуск 6 Minute English или попросите GigaChat написать текст.</p>
       ) : (
         <ul className="library">
           {sorted.map((text) => {
@@ -93,8 +93,8 @@ function NewText() {
   }
 
   const generate = async () => {
-    if (!settings.apiKey) {
-      setFailure('Для генерации нужен ключ Gemini в настройках')
+    if (!settings.gigachatKey) {
+      setFailure('Для генерации нужен ключ GigaChat в настройках')
       return
     }
     setBusy(true)
@@ -126,7 +126,7 @@ function NewText() {
       <h1>Новый текст</h1>
       <div className="segmented" role="tablist">
         <button type="button" className={mode === 'paste' ? 'on' : ''} onClick={() => setMode('paste')}>Вставить</button>
-        <button type="button" className={mode === 'generate' ? 'on' : ''} onClick={() => setMode('generate')}>Написать с Gemini</button>
+        <button type="button" className={mode === 'generate' ? 'on' : ''} onClick={() => setMode('generate')}>Написать с GigaChat</button>
       </div>
       {mode === 'paste' ? (
         <>
@@ -178,7 +178,7 @@ function NewText() {
           )}
           {failure && <p className="leech" role="alert">{failure}</p>}
           <button className="primary" type="button" disabled={busy} onClick={() => { void generate() }}>
-            {busy ? 'Gemini пишет… до минуты' : 'Написать текст'}
+            {busy ? 'Пишу текст… до минуты' : 'Написать текст'}
           </button>
         </>
       )}
@@ -263,8 +263,8 @@ function Reader({ id }: { id: string }) {
       setShowTranslation(true)
       return
     }
-    if (!settings.apiKey) {
-      setTranslateError('Для перевода нужен ключ Gemini в настройках')
+    if (!settings.gigachatKey) {
+      setTranslateError('Для перевода нужен ключ GigaChat в настройках')
       return
     }
     setTranslating(true)

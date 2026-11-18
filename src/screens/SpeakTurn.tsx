@@ -53,7 +53,7 @@ export function SpeakTurn({ card, onDone }: { card: Card; onDone: () => void }) 
       setRevealed(true)
       return
     }
-    if (!settings.apiKey) {
+    if (!settings.gigachatKey) {
       const ok = said.toLowerCase().includes(card.term.trim().toLowerCase())
       setResult({
         ok,

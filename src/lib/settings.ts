@@ -1,15 +1,15 @@
-import type { Direction, ImageSource, Settings } from '../types'
+import type { Direction, Settings } from '../types'
 
 const DIRECTIONS = new Set<Direction>(['cloze', 'reverse', 'mix'])
-const IMAGE_SOURCES = new Set<ImageSource>(['smart', 'photo', 'gemini', 'off'])
 
 const KEY = 'pocket.settings'
 
 export const DEFAULT_SETTINGS: Settings = {
-  apiKey: '',
-  textModel: 'gemini-3.8-flash',
-  fastModel: 'gemini-3.5-flash-lite',
-  imageModel: 'gemini-3.1-flash-lite-image',
+  gigachatKey: '',
+  kandinskyKey: '',
+  kandinskySecret: '',
+  textModel: 'GigaChat-2-Pro',
+  fastModel: 'GigaChat-2',
   dailyNewLimit: 8,
   imageSource: 'smart',
   direction: 'mix',
@@ -17,32 +17,28 @@ export const DEFAULT_SETTINGS: Settings = {
   speak: true,
 }
 
-const RETIRED_MODELS: Record<string, string> = {
-  'gemini-2.5-flash': DEFAULT_SETTINGS.textModel,
-  'gemini-2.0-flash': DEFAULT_SETTINGS.textModel,
-  'gemini-2.5-flash-lite': DEFAULT_SETTINGS.fastModel,
-  'gemini-2.5-flash-image': DEFAULT_SETTINGS.imageModel,
-  'gemini-3.1-flash-image': DEFAULT_SETTINGS.imageModel,
-}
-
-type StoredSettings = Partial<Settings> & { imagesOnImport?: boolean }
+type StoredSettings = Partial<Settings> & { imagesOnImport?: boolean; apiKey?: string; imageModel?: string; imageSource?: string }
 
 export function loadSettings(): Settings {
   try {
     const raw = localStorage.getItem(KEY)
     if (!raw) return { ...DEFAULT_SETTINGS }
     const parsed = JSON.parse(raw) as StoredSettings
-    const { imagesOnImport, ...rest } = parsed
+    const { imagesOnImport, apiKey, imageModel, imageSource, ...rest } = parsed
+    void apiKey
+    void imageModel
     const next: Settings = {
       ...DEFAULT_SETTINGS,
       ...rest,
-      textModel: currentModel(parsed.textModel, DEFAULT_SETTINGS.textModel),
-      fastModel: currentModel(parsed.fastModel, DEFAULT_SETTINGS.fastModel),
-      imageModel: currentModel(parsed.imageModel, DEFAULT_SETTINGS.imageModel),
+      gigachatKey: typeof parsed.gigachatKey === 'string' ? parsed.gigachatKey : '',
+      kandinskyKey: typeof parsed.kandinskyKey === 'string' ? parsed.kandinskyKey : '',
+      kandinskySecret: typeof parsed.kandinskySecret === 'string' ? parsed.kandinskySecret : '',
+      textModel: textModel(parsed.textModel, DEFAULT_SETTINGS.textModel),
+      fastModel: textModel(parsed.fastModel, DEFAULT_SETTINGS.fastModel),
       dailyNewLimit: clampLimit(parsed.dailyNewLimit ?? DEFAULT_SETTINGS.dailyNewLimit),
       // Older versions had an on/off switch for Gemini drawings, which the free tier no longer serves.
-      imageSource: IMAGE_SOURCES.has(parsed.imageSource as ImageSource)
-        ? (parsed.imageSource as ImageSource)
+      imageSource: imageSource === 'photo' || imageSource === 'off' || imageSource === 'smart'
+        ? imageSource
         : imagesOnImport === false ? 'off' : 'smart',
       direction: DIRECTIONS.has(parsed.direction as Direction) ? (parsed.direction as Direction) : DEFAULT_SETTINGS.direction,
       dailyGoalMinutes: clampGoal(parsed.dailyGoalMinutes ?? DEFAULT_SETTINGS.dailyGoalMinutes),
@@ -58,20 +54,22 @@ export function loadSettings(): Settings {
 export function saveSettings(settings: Settings) {
   const next = {
     ...settings,
-    textModel: currentModel(settings.textModel, DEFAULT_SETTINGS.textModel),
-    fastModel: currentModel(settings.fastModel, DEFAULT_SETTINGS.fastModel),
-    imageModel: currentModel(settings.imageModel, DEFAULT_SETTINGS.imageModel),
+    textModel: textModel(settings.textModel, DEFAULT_SETTINGS.textModel),
+    fastModel: textModel(settings.fastModel, DEFAULT_SETTINGS.fastModel),
     dailyNewLimit: clampLimit(settings.dailyNewLimit),
-    apiKey: settings.apiKey.trim(),
+    gigachatKey: settings.gigachatKey.trim(),
+    kandinskyKey: settings.kandinskyKey.trim(),
+    kandinskySecret: settings.kandinskySecret.trim(),
   }
   localStorage.setItem(KEY, JSON.stringify(next))
   return next
 }
 
-export function currentModel(model: string | undefined, fallback: string): string {
+/** Gemini names left in older settings are not valid GigaChat models. */
+export function textModel(model: string | undefined, fallback: string): string {
   const name = model?.trim()
-  if (!name) return fallback
-  return RETIRED_MODELS[name] ?? name
+  if (!name || name.startsWith('gemini')) return fallback
+  return name
 }
 
 export function clampGoal(value: number): number {

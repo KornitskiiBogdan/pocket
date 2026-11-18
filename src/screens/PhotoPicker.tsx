@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import type { Card } from '../types'
 import { useDeck } from '../context'
-import { illustrate, ImageQuotaError, localImagePrompt } from '../lib/gemini'
+import { localImagePrompt } from '../lib/gemini'
+import { drawKandinsky, hasKandinskyKeys, KandinskyError } from '../lib/kandinsky'
 import { fetchPhoto, searchPhotos, type PhotoHit } from '../lib/photos'
 
 export function PhotoPicker({ card }: { card: Card }) {
@@ -33,12 +34,12 @@ export function PhotoPicker({ card }: { card: Card }) {
     }
   }
 
-  const draw = async () => {
+  const drawWithKandinsky = async () => {
     setDrawing(true)
     try {
-      await attachImage(card.id, await illustrate(card.imagePrompt || localImagePrompt(card.term, card.sentence), settings))
+      await attachImage(card.id, await drawKandinsky(card.imagePrompt || localImagePrompt(card.term, card.sentence), settings), 'Kandinsky')
     } catch (error) {
-      toast(error instanceof ImageQuotaError || error instanceof Error ? error.message : 'Картинка не вышла')
+      toast(error instanceof KandinskyError || error instanceof Error ? error.message : 'Картинка не вышла')
     } finally {
       setDrawing(false)
     }
@@ -56,9 +57,9 @@ export function PhotoPicker({ card }: { card: Card }) {
         <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="что должно быть на фото, по-английски" aria-label="Поиск фото" />
         <button className="ghost" type="submit" disabled={searching || !query.trim()}>{searching ? 'Ищу…' : 'Найти фото'}</button>
       </form>
-      {(settings.imageSource === 'gemini' || settings.imageSource === 'smart') && (
-        <button className="text-button" type="button" disabled={drawing || !settings.apiKey} onClick={() => { void draw() }}>
-          {drawing ? 'Рисую…' : 'Нарисовать в Gemini'}
+      {hasKandinskyKeys(settings) && (
+        <button className="text-button" type="button" disabled={drawing} onClick={() => { void drawWithKandinsky() }}>
+          {drawing ? 'Рисую…' : 'Нарисовать в Kandinsky'}
         </button>
       )}
       {hits && hits.length === 0 && <p className="hint">Ничего не нашлось. Попробуйте конкретнее: кто, что делает, где.</p>}

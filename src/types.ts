@@ -30,9 +30,9 @@ export interface Card {
   imagePrompt: string
   /** Short English keywords for a photo search. */
   imageQuery: string
-  /** Author and licence of a found photo; empty for own pictures and Gemini drawings. */
+  /** Author and licence of a found photo; empty for own pictures and Kandinsky drawings. */
   imageCredit: string
-  /** The meaning cannot be shown by an ordinary photo, so it is worth a Gemini drawing. */
+  /** The meaning cannot be shown by an ordinary photo, so Kandinsky may draw it. */
   abstract: boolean
   createdAt: number
   updatedAt: number
@@ -83,14 +83,18 @@ export interface DeckFile {
   activity?: ActivityLog
 }
 
-export type ImageSource = 'smart' | 'photo' | 'gemini' | 'off'
+export type ImageSource = 'smart' | 'photo' | 'off'
 
 export interface Settings {
-  apiKey: string
+  /** GigaChat authorization key. Text requests use it; it never goes into the deck file. */
+  gigachatKey: string
+  /** FusionBrain API key. Drawings for abstract words; never exported. */
+  kandinskyKey: string
+  /** FusionBrain secret key. Paired with kandinskyKey; never exported. */
+  kandinskySecret: string
   textModel: string
   /** Used for card glosses, where speed matters more than reasoning. */
   fastModel: string
-  imageModel: string
   dailyNewLimit: number
   imageSource: ImageSource
   direction: Direction

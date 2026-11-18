@@ -6,7 +6,8 @@ import { allCards, allTexts, clearCards, deleteCard, deleteCards, deleteText, pu
 import { mergeByRecency, normalizeCard, normalizeText, parseDeckFile, serializeDeck } from './lib/deckFile'
 import { lastBackup, requestPersistence, saveBackup } from './lib/storage'
 import { todayKey } from './lib/format'
-import { enrich, illustrate, ImageQuotaError, localImagePrompt } from './lib/gemini'
+import { enrich, localImagePrompt } from './lib/gemini'
+import { artistFor, drawKandinsky, hasKandinskyKeys, kandinskyQuotaHit, KandinskyQuotaError, rememberKandinskyQuota, type ArtistChoice } from './lib/kandinsky'
 import { findPhoto } from './lib/photos'
 import { loadSettings, saveSettings } from './lib/settings'
 import { starterTexts } from './lib/starter'
@@ -247,11 +248,11 @@ export function DeckProvider({ children }: { children: ReactNode }) {
       if (created.length) logActivity({ added: created.length })
 
       const currentSettings = settingsRef.current
-      if (!currentSettings.apiKey || !enrichItems.length) {
+      if (!currentSettings.gigachatKey || !enrichItems.length) {
         const added = created.length ? `Добавлено ${created.length}. ` : ''
-        const translated = currentSettings.apiKey || !enrichItems.length
+        const translated = currentSettings.gigachatKey || !enrichItems.length
           ? ''
-          : 'Без ключа перевод и картинка не заполнились.'
+          : 'Без ключа GigaChat перевод не заполнился.'
         const extra = explain.length ? ` Объяснение дописано: ${explain.length}.` : ''
         setJob({
           phase: 'done',
@@ -273,11 +274,11 @@ export function DeckProvider({ children }: { children: ReactNode }) {
       let failedImages = 0
       let quotaNote = ''
       if (currentSettings.imageSource !== 'off') {
-        const gemini = currentSettings.imageSource === 'gemini'
         const drawsSome = skeletons.some((card) => wantsDrawing(card, currentSettings))
+        const drawsKandinsky = drawsSome && hasKandinskyKeys(currentSettings)
         let done = 0
         let next = 0
-        const label = gemini ? 'Рисую картинки' : drawsSome ? 'Подбираю картинки' : 'Ищу фото'
+        const label = drawsKandinsky ? 'Рисую в Kandinsky' : 'Ищу фото'
         setJob({ phase: 'images', done: 0, total: skeletons.length, message: `${label}…` })
         const worker = async () => {
           while (next < skeletons.length) {
@@ -309,8 +310,8 @@ export function DeckProvider({ children }: { children: ReactNode }) {
             setJob({ phase: 'images', done, total: skeletons.length, message: `${label}: ${done} из ${skeletons.length}` })
           }
         }
-        await Promise.all(Array.from({ length: Math.min(gemini ? 2 : PHOTO_PARALLEL, skeletons.length) }, worker))
-        if (drawsSome && imageQuotaHit()) quotaNote = ' Gemini не рисует на бесплатном тарифе, взял фото.'
+        await Promise.all(Array.from({ length: Math.min(PHOTO_PARALLEL, skeletons.length) }, worker))
+        if (drawsSome && hasKandinskyKeys(currentSettings) && kandinskyQuotaHit()) quotaNote = ' Лимит Kandinsky на этот месяц кончился, взял фото.'
       }
 
       const imageNote = (failedImages ? ` Без картинки: ${failedImages}.` : '') + quotaNote
@@ -345,8 +346,8 @@ export function DeckProvider({ children }: { children: ReactNode }) {
     if (busy.current) return
     const card = cardsRef.current.find((item) => item.id === id)
     if (!card) return
-    if (!settingsRef.current.apiKey) {
-      toast('Сначала вставьте ключ в настройках')
+    if (!settingsRef.current.gigachatKey) {
+      toast('Сначала вставьте ключ GigaChat в настройках')
       return
     }
     busy.current = true
@@ -496,25 +497,24 @@ function mergeCards(current: Card[], updates: Card[]): Card[] {
 }
 
 const PHOTO_PARALLEL = 4
-const QUOTA_KEY = 'pocket.imageQuota'
-
-function imageQuotaHit(): boolean {
-  return localStorage.getItem(QUOTA_KEY) === todayKey()
-}
 
 function wantsDrawing(card: Card, settings: Settings): boolean {
-  return settings.imageSource === 'gemini' || (settings.imageSource === 'smart' && card.abstract)
+  return settings.imageSource === 'smart' && card.abstract
 }
 
-/** Gemini drawing when the setting asks for one and the key still allows it today, otherwise a found photo. */
+/** Kandinsky for an abstract word, otherwise a found photo. */
 async function pictureFor(card: Card, settings: Settings): Promise<{ image: string; credit: string } | null> {
-  if (wantsDrawing(card, settings) && !imageQuotaHit()) {
+  const choice: ArtistChoice = {
+    wantsDrawing: wantsDrawing(card, settings),
+    hasKandinsky: hasKandinskyKeys(settings),
+    kandinskyBlocked: kandinskyQuotaHit(),
+  }
+  if (artistFor(choice) === 'kandinsky') {
     try {
-      const image = await illustrate(card.imagePrompt || localImagePrompt(card.term, card.sentence), settings)
-      return { image, credit: '' }
+      const image = await drawKandinsky(card.imagePrompt || localImagePrompt(card.term, card.sentence), settings)
+      return { image, credit: 'Kandinsky' }
     } catch (error) {
-      if (error instanceof ImageQuotaError) localStorage.setItem(QUOTA_KEY, todayKey())
-      else if (settings.imageSource === 'gemini') throw error
+      if (error instanceof KandinskyQuotaError) rememberKandinskyQuota()
     }
   }
   return findPhoto(card.term)
