@@ -139,7 +139,7 @@ function modelOf(settings: Settings, tier: 'smart' | 'fast'): string {
 }
 
 function unreachable(): GigaChatError {
-  return new GigaChatError('Браузер не открывает обмен ключа на порту 9443. Вставьте токен доступа из кабинета: он начинается с eyJ и действует 30 минут.')
+  return new GigaChatError('Браузер не открыл обмен ключа на порту 9443. Короткий токен получить не удалось.')
 }
 
 function httpError(status: number, schema: boolean): GigaChatError {

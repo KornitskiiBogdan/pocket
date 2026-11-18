@@ -65,10 +65,10 @@ export function Settings() {
           autoComplete="off"
           spellCheck={false}
           onChange={(event) => updateSettings({ ...settings, gigachatKey: event.target.value })}
-          placeholder="eyJ..."
+          placeholder="Ключ авторизации"
         />
       </label>
-      <p className="hint">Вставьте токен доступа из кабинета GigaChat: строка начинается с eyJ и действует 30 минут. Он остаётся только в этом браузере и в файл колоды не попадает. Нужен сертификат Минцифры или Яндекс Браузер.</p>
+      <p className="hint">Вставьте ключ авторизации из кабинета GigaChat, кнопка «Получить ключ». Приложение само меняет его на короткий токен. Ключ остаётся только в этом браузере и в файл колоды не попадает. Нужен сертификат Минцифры или Яндекс Браузер.</p>
       <div className="row-actions">
         <button
           className="ghost"
