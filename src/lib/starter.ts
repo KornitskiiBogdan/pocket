@@ -108,5 +108,6 @@ export function starterTexts(now: number): ReadingText[] {
     createdAt: now - index,
     updatedAt: 0,
     readAt: null,
+    translation: '',
   }))
 }

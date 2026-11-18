@@ -145,14 +145,22 @@ export async function checkSentence(
   card: { term: string; translation: string },
   text: string,
   settings: Settings,
+  aim?: { sentence: string; sentenceTranslation: string },
 ): Promise<SentenceCheck> {
+  const task = aim
+    ? `The learner sees only this Russian sentence and is trying to say it in English: ${JSON.stringify(aim.sentenceTranslation)}
+The English sentence from the card is: ${JSON.stringify(aim.sentence)}
+The target expression "${card.term}" should appear. Accept small speech-to-text mistakes. ok is true when the meaning matches and the target is used.`
+    : `The learner wrote or said one sentence to practise the target expression.
+Target: "${card.term}"${card.translation ? ` (meaning: ${card.translation})` : ''}`
   const prompt = `You are a friendly English tutor for a Russian speaker moving from B1 to B2.
-The learner wrote or said one sentence to practise the target expression.
-Target: "${card.term}"${card.translation ? ` (meaning: ${card.translation})` : ''}
+${task}
 Learner sentence: ${JSON.stringify(text)}
 
 Return JSON:
-- ok: true only if the sentence is grammatical AND uses the target with the right meaning
+- ok: ${aim
+    ? 'true when the spoken sentence matches the Russian meaning and uses the target, even with small recognition errors'
+    : 'true only if the sentence is grammatical AND uses the target with the right meaning'}
 - corrected: the learner sentence with the minimum changes needed; copy it unchanged if it is already correct
 - natural: how a native speaker would most likely say the same idea, keeping the target expression
 - comment: in Russian, at most two short sentences. Name the main mistake and the rule, or say what is good. Do not repeat the corrected sentence.`
@@ -210,6 +218,43 @@ Return JSON: "title" — a short English title, "paragraphs" — the paragraphs 
     : []
   if (!paragraphs.length) throw new Error('Gemini не прислал текст')
   return { title: clip(raw.title, 120) || request.topic || 'Текст', body: paragraphs.join('\n\n') }
+}
+
+const TRANSLATION_SCHEMA = {
+  type: 'object',
+  properties: {
+    paragraphs: { type: 'array', items: { type: 'string' } },
+  },
+  required: ['paragraphs'],
+}
+
+export function textParagraphs(body: string): string[] {
+  return body.split(/\n\s*\n|\r?\n/).map((item) => item.trim()).filter(Boolean)
+}
+
+/** Russian translation of a reading text, one paragraph per source paragraph. */
+export async function translateReading(body: string, settings: Settings): Promise<string> {
+  const paragraphs = textParagraphs(body)
+  if (!paragraphs.length) throw new Error('Нечего переводить')
+  const prompt = `Translate this English text into natural Russian for a learner who sometimes understands every word and still misses the sentence.
+Return JSON with "paragraphs": exactly ${paragraphs.length} strings, one Russian paragraph per input paragraph, same order. No titles, no notes, no vocabulary list.
+
+Input paragraphs:
+${JSON.stringify(paragraphs)}`
+  let parsed: unknown
+  try {
+    parsed = parseJson(await generate(settings, prompt, TRANSLATION_SCHEMA))
+  } catch (error) {
+    const message = error instanceof Error ? error.message : ''
+    if (!/schema|mime|json|invalid|unknown/i.test(message)) throw error
+    parsed = parseJson(await generate(settings, prompt, null))
+  }
+  const raw = parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {}
+  const russian = Array.isArray(raw.paragraphs)
+    ? raw.paragraphs.filter((item): item is string => typeof item === 'string' && item.trim() !== '').map((item) => item.trim())
+    : []
+  if (!russian.length) throw new Error('Gemini не прислал перевод')
+  return russian.join('\n\n')
 }
 
 export async function pingKey(settings: Settings): Promise<void> {

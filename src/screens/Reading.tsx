@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { Card, ReadingText, TextOrigin } from '../types'
 import { useDeck } from '../context'
 import { cleanTranscript } from '../lib/bbc'
-import { generateReading } from '../lib/gemini'
+import { generateReading, textParagraphs, translateReading } from '../lib/gemini'
 import { draftsFromSelection, parseArticle, type PassageSentence } from '../lib/parse'
 import { findPhrase, knownIds, wordCount } from '../lib/reader'
 import { LEARNED_MINUTES } from '../lib/stats'
@@ -88,6 +88,7 @@ function NewText() {
       createdAt: now,
       updatedAt: now,
       readAt: null,
+      translation: '',
     })
   }
 
@@ -110,6 +111,7 @@ function NewText() {
         createdAt: now,
         updatedAt: now,
         readAt: null,
+        translation: '',
       })
     } catch (error) {
       setFailure(error instanceof Error ? error.message : 'Текст не получился')
@@ -185,7 +187,7 @@ function NewText() {
 }
 
 function Reader({ id }: { id: string }) {
-  const { texts, cards, saveText, removeText, importDrafts, job } = useDeck()
+  const { texts, cards, settings, saveText, removeText, importDrafts, job } = useDeck()
   const text = texts.find((item) => item.id === id)
   const article = useMemo(() => parseArticle(text?.body ?? ''), [text?.body])
   const sentences = useMemo(() => article.flat(), [article])
@@ -193,6 +195,14 @@ function Reader({ id }: { id: string }) {
   const known = useMemo(() => knownIds(sentences, terms), [sentences, terms])
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [extras, setExtras] = useState<string[]>([])
+  const [showTranslation, setShowTranslation] = useState(false)
+  const [translating, setTranslating] = useState(false)
+  const [translateError, setTranslateError] = useState('')
+
+  useEffect(() => {
+    setShowTranslation(false)
+    setTranslateError('')
+  }, [text?.id])
 
   useEffect(() => {
     if (!text) return
@@ -241,21 +251,64 @@ function Reader({ id }: { id: string }) {
     setExtras([])
   }
 
+  const russian = textParagraphs(text.translation ?? '')
+  const aligned = showTranslation && russian.length === article.length && article.length > 0
+
+  const toggleTranslation = async () => {
+    if (showTranslation) {
+      setShowTranslation(false)
+      return
+    }
+    if ((text.translation ?? '').trim()) {
+      setShowTranslation(true)
+      return
+    }
+    if (!settings.apiKey) {
+      setTranslateError('Для перевода нужен ключ Gemini в настройках')
+      return
+    }
+    setTranslating(true)
+    setTranslateError('')
+    try {
+      const translation = await translateReading(text.body, settings)
+      await saveText({ ...text, translation, updatedAt: Date.now() })
+      setShowTranslation(true)
+    } catch (error) {
+      setTranslateError(error instanceof Error ? error.message : 'Перевод не получился')
+    } finally {
+      setTranslating(false)
+    }
+  }
+
   return (
     <section className="panel reader">
       <a className="back" href="#/read">← Тексты</a>
       <p className="eyebrow">{ORIGIN_LABEL[text.origin]}</p>
       <h1>{text.title}</h1>
       <p className="hint">Подчёркнуто то, что уже есть в колоде. Нажмите незнакомое слово; соседние слова склеиваются во фразу.</p>
+      <div className="row-actions">
+        <button className="ghost" type="button" disabled={translating} onClick={() => { void toggleTranslation() }}>
+          {translating ? 'Перевожу…' : showTranslation ? 'Скрыть перевод' : 'Показать перевод'}
+        </button>
+      </div>
+      {translateError && <p className="leech" role="alert">{translateError}</p>}
       <article className="article">
         {article.map((paragraph, index) => (
-          <p key={index}>
-            {paragraph.map((sentence) => (
-              <ReaderSentence key={sentence.words[0]?.id ?? sentence.text} sentence={sentence} picked={picked} known={known} onToggle={toggle} />
-            ))}
-          </p>
+          <div key={index}>
+            <p>
+              {paragraph.map((sentence) => (
+                <ReaderSentence key={sentence.words[0]?.id ?? sentence.text} sentence={sentence} picked={picked} known={known} onToggle={toggle} />
+              ))}
+            </p>
+            {aligned && russian[index] && <p className="ru">{russian[index]}</p>}
+          </div>
         ))}
       </article>
+      {showTranslation && !aligned && russian.length > 0 && (
+        <div className="translation-block">
+          {russian.map((paragraph, index) => <p key={index}>{paragraph}</p>)}
+        </div>
+      )}
       <div className="row-actions">
         <button
           className={text.readAt ? 'ghost' : 'primary'}

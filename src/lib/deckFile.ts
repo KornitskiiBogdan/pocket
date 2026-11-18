@@ -73,6 +73,7 @@ export function normalizeText(item: unknown): ReadingText | null {
     createdAt: numberField(raw.createdAt, now),
     updatedAt: numberField(raw.updatedAt, now),
     readAt: typeof raw.readAt === 'number' ? raw.readAt : null,
+    translation: stringField(raw.translation),
   }
 }
 

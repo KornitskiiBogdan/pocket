@@ -1,4 +1,5 @@
 import type { Card, Grade } from '../types'
+import type { Enriched } from './gemini'
 import { applyGrade, freshSrs } from './srs'
 
 export function createCard(input: {
@@ -50,4 +51,28 @@ export const MINE_LIMIT = 5
 
 export function resetProgress(card: Card, now: number): Card {
   return { ...card, ...freshSrs(now), introducedOn: card.introducedOn, updatedAt: now }
+}
+
+/** Fill an empty English explanation. A gloss never replaces one already on the card. */
+export function keepDefinition(card: Card, gloss: string | undefined, now = Date.now()): Card {
+  const next = gloss?.trim() ?? ''
+  if (!next || card.definition) return card
+  return { ...card, definition: next, updatedAt: now }
+}
+
+/** Copy a Gemini gloss onto a card. The English explanation stays as it was saved. */
+export function applyEnrich(card: Card, enriched: Enriched | undefined): Card {
+  if (!enriched) return card
+  return {
+    ...card,
+    partOfSpeech: enriched.partOfSpeech || card.partOfSpeech,
+    translation: enriched.translation || card.translation,
+    sentence: enriched.sentence || card.sentence,
+    sentenceTranslation: enriched.sentenceTranslation || card.sentenceTranslation,
+    imagePrompt: enriched.imagePrompt || card.imagePrompt,
+    imageQuery: enriched.imageQuery || card.imageQuery,
+    definition: card.definition,
+    abstract: enriched.abstract,
+    updatedAt: Date.now(),
+  }
 }

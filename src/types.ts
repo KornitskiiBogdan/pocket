@@ -69,6 +69,8 @@ export interface ReadingText {
   createdAt: number
   updatedAt: number
   readAt: number | null
+  /** Cached Russian translation of the whole text. Empty until the reader asks for one. */
+  translation: string
 }
 
 export interface DeckFile {
@@ -93,6 +95,8 @@ export interface Settings {
   imageSource: ImageSource
   direction: Direction
   dailyGoalMinutes: number
+  /** After Again or Hard, say the English phrase. Off for a quiet review. */
+  speak: boolean
 }
 
 export interface Draft {

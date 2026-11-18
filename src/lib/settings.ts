@@ -14,6 +14,7 @@ export const DEFAULT_SETTINGS: Settings = {
   imageSource: 'smart',
   direction: 'mix',
   dailyGoalMinutes: 15,
+  speak: true,
 }
 
 const RETIRED_MODELS: Record<string, string> = {
@@ -45,6 +46,7 @@ export function loadSettings(): Settings {
         : imagesOnImport === false ? 'off' : 'smart',
       direction: DIRECTIONS.has(parsed.direction as Direction) ? (parsed.direction as Direction) : DEFAULT_SETTINGS.direction,
       dailyGoalMinutes: clampGoal(parsed.dailyGoalMinutes ?? DEFAULT_SETTINGS.dailyGoalMinutes),
+      speak: parsed.speak !== false,
     }
     if (JSON.stringify(next) !== raw) localStorage.setItem(KEY, JSON.stringify(next))
     return next

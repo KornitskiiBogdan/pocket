@@ -6,6 +6,7 @@ import { BACKUP_STALE_DAYS } from './lib/storage'
 import { Deck } from './screens/Deck'
 import { EditCard } from './screens/EditCard'
 import { Import } from './screens/Import'
+import { Play } from './screens/Play'
 import { Progress } from './screens/Progress'
 import { Reading } from './screens/Reading'
 import { Review } from './screens/Review'
@@ -13,10 +14,11 @@ import { Settings } from './screens/Settings'
 
 const SNOOZE_KEY = 'pocket.backupSnooze'
 
-type Section = 'review' | 'read' | 'import' | 'deck' | 'progress' | 'settings'
+type Section = 'review' | 'read' | 'import' | 'deck' | 'play' | 'progress' | 'settings'
 
 const TABS: { id: Section; href: string; label: string }[] = [
   { id: 'review', href: '#/review', label: 'Повтор' },
+  { id: 'play', href: '#/play', label: 'Слова' },
   { id: 'read', href: '#/read', label: 'Чтение' },
   { id: 'import', href: '#/import', label: 'Импорт' },
   { id: 'deck', href: '#/deck', label: 'Колода' },
@@ -25,6 +27,7 @@ const TABS: { id: Section; href: string; label: string }[] = [
 
 const TITLES: Record<Section, string> = {
   review: 'Повтор',
+  play: 'Слова',
   read: 'Чтение',
   import: 'Импорт',
   deck: 'Колода',
@@ -33,7 +36,7 @@ const TITLES: Record<Section, string> = {
 }
 
 type Route =
-  | { section: 'review' | 'import' | 'settings' }
+  | { section: 'review' | 'play' | 'import' | 'settings' }
   | { section: 'deck'; view: 'list' | 'leech' | 'card'; id: string }
   | { section: 'read'; view: 'library' | 'new' | 'text'; id: string }
   | { section: 'progress'; view: 'calendar' | 'stats' }
@@ -119,6 +122,7 @@ export function App() {
       )}
       <main>
         {route.section === 'review' && <Review />}
+        {route.section === 'play' && <Play />}
         {route.section === 'import' && <Import />}
         {route.section === 'settings' && <Settings />}
         {route.section === 'deck' && route.view === 'card' && <EditCard id={route.id} />}
@@ -159,6 +163,7 @@ function routeOf(hash: string): Route {
     return { section: 'read', view: 'text', id: rest }
   }
   if (head === 'progress') return { section: 'progress', view: rest === 'stats' ? 'stats' : 'calendar' }
+  if (head === 'play') return { section: 'play' }
   if (head === 'import') return { section: 'import' }
   if (head === 'settings') return { section: 'settings' }
   return { section: 'review' }

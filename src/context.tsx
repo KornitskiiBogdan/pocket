@@ -1,12 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { ActivityLog, Card, DayStat, Draft, ReadingText, Settings } from './types'
 import { bump, deviceId, loadActivity, mergeActivity, saveActivity } from './lib/activity'
-import { createCard } from './lib/card'
+import { applyEnrich, createCard, keepDefinition } from './lib/card'
 import { allCards, allTexts, clearCards, deleteCard, deleteCards, deleteText, putCards, putTexts } from './lib/db'
 import { mergeByRecency, normalizeCard, normalizeText, parseDeckFile, serializeDeck } from './lib/deckFile'
 import { lastBackup, requestPersistence, saveBackup } from './lib/storage'
 import { todayKey } from './lib/format'
-import { enrich, illustrate, ImageQuotaError, localImagePrompt, type Enriched } from './lib/gemini'
+import { enrich, illustrate, ImageQuotaError, localImagePrompt } from './lib/gemini'
 import { findPhoto } from './lib/photos'
 import { loadSettings, saveSettings } from './lib/settings'
 import { starterTexts } from './lib/starter'
@@ -181,34 +181,51 @@ export function DeckProvider({ children }: { children: ReactNode }) {
 
   const importDrafts = useCallback(async (drafts: Draft[], source: string) => {
     if (busy.current) return
-    const existing = new Set(cardsRef.current.map((card) => keyOf(card.term, card.sentence)))
     const seen = new Set<string>()
     const fresh: Draft[] = []
+    const retry: Card[] = []
+    const explain: Card[] = []
     let dupes = 0
+    const now = Date.now()
     for (const draft of drafts) {
       const term = draft.term.trim()
       const sentence = draft.sentence.trim()
+      const gloss = draft.gloss?.trim() || ''
       if (!term) continue
       const key = keyOf(term, sentence)
-      if (existing.has(key) || seen.has(key)) {
+      if (seen.has(key)) {
         dupes += 1
         continue
       }
       seen.add(key)
-      fresh.push({ term, sentence, gloss: draft.gloss?.trim() })
+      const existing = cardsRef.current.find((card) => keyOf(card.term, card.sentence) === key)
+      if (!existing) {
+        fresh.push({ term, sentence, gloss })
+        continue
+      }
+      const withExplanation = keepDefinition(existing, gloss, now)
+      if (!existing.translation) {
+        retry.push(withExplanation)
+        continue
+      }
+      if (withExplanation !== existing) {
+        explain.push(withExplanation)
+        continue
+      }
+      dupes += 1
     }
-    if (!fresh.length) {
+    if (!fresh.length && !retry.length && !explain.length) {
       toast(dupes ? 'Такие карточки уже есть' : 'Нечего добавлять')
       return
     }
-    if (fresh.length > 40) {
+    if (fresh.length + retry.length > 40) {
       toast('За раз можно 40 карточек. Разбейте список.')
       return
     }
 
     busy.current = true
     const started = Date.now()
-    let skeletons = fresh.map((draft, index) => createCard({
+    const created = fresh.map((draft, index) => createCard({
       term: draft.term,
       sentence: draft.sentence,
       definition: draft.gloss,
@@ -216,30 +233,42 @@ export function DeckProvider({ children }: { children: ReactNode }) {
       createdAt: started + index,
       now: started,
     }))
+    // Snapshot taken before Gemini. A failed request restores these, explanation included.
+    const saved = [...created, ...retry]
+    const enrichItems = [
+      ...fresh,
+      ...retry.map((card) => ({ term: card.term, sentence: card.sentence, gloss: card.definition || undefined })),
+    ]
     try {
-      setJob({ phase: 'save', done: 0, total: skeletons.length, message: 'Сохраняю слова…' })
-      await putCards(skeletons)
-      remember([...skeletons, ...cardsRef.current])
-      logActivity({ added: skeletons.length })
+      const toStore = [...saved, ...explain]
+      setJob({ phase: 'save', done: 0, total: toStore.length, message: 'Сохраняю слова…' })
+      await putCards(toStore)
+      remember(mergeCards(cardsRef.current, toStore))
+      if (created.length) logActivity({ added: created.length })
 
       const currentSettings = settingsRef.current
-      if (!currentSettings.apiKey) {
+      if (!currentSettings.apiKey || !enrichItems.length) {
+        const added = created.length ? `Добавлено ${created.length}. ` : ''
+        const translated = currentSettings.apiKey || !enrichItems.length
+          ? ''
+          : 'Без ключа перевод и картинка не заполнились.'
+        const extra = explain.length ? ` Объяснение дописано: ${explain.length}.` : ''
         setJob({
           phase: 'done',
-          done: skeletons.length,
-          total: skeletons.length,
-          message: `Добавлено ${skeletons.length}. Без ключа перевод и картинка не заполнились.`,
+          done: toStore.length,
+          total: toStore.length,
+          message: `${added}${translated}${extra}`.trim() || `Объяснение на карточке: ${explain.length}.`,
         })
         return
       }
 
-      setJob({ phase: 'text', done: 0, total: skeletons.length, message: 'Перевожу…' })
-      const enriched = await enrich(fresh, currentSettings, (done, total) => {
+      setJob({ phase: 'text', done: 0, total: saved.length, message: 'Перевожу…' })
+      const enriched = await enrich(enrichItems, currentSettings, (done, total) => {
         setJob({ phase: 'text', done, total, message: `Перевод ${done} из ${total}` })
       })
-      skeletons = skeletons.map((card, index) => applyEnrich(card, enriched[index]))
+      let skeletons = saved.map((card, index) => applyEnrich(card, enriched[index]))
       await putCards(skeletons)
-      remember(replaceCards(cardsRef.current, skeletons))
+      remember(mergeCards(cardsRef.current, skeletons))
 
       let failedImages = 0
       let quotaNote = ''
@@ -253,11 +282,22 @@ export function DeckProvider({ children }: { children: ReactNode }) {
         const worker = async () => {
           while (next < skeletons.length) {
             const index = next++
+            if (skeletons[index].image) {
+              done += 1
+              setJob({ phase: 'images', done, total: skeletons.length, message: `${label}: ${done} из ${skeletons.length}` })
+              continue
+            }
             try {
               const picture = await pictureFor(skeletons[index], currentSettings)
               if (picture) {
                 const latest = cardsRef.current.find((card) => card.id === skeletons[index].id) ?? skeletons[index]
-                skeletons[index] = { ...latest, image: picture.image, imageCredit: picture.credit, updatedAt: Date.now() }
+                skeletons[index] = {
+                  ...latest,
+                  definition: latest.definition || skeletons[index].definition,
+                  image: picture.image,
+                  imageCredit: picture.credit,
+                  updatedAt: Date.now(),
+                }
                 await updateCard(skeletons[index])
               } else {
                 failedImages += 1
@@ -275,16 +315,27 @@ export function DeckProvider({ children }: { children: ReactNode }) {
 
       const imageNote = (failedImages ? ` Без картинки: ${failedImages}.` : '') + quotaNote
       const dupeNote = dupes ? ` Пропустил дубли: ${dupes}.` : ''
+      const retryNote = retry.length ? ` Перевод дописан: ${retry.length}.` : ''
+      const explainNote = explain.length ? ` Объяснение дописано: ${explain.length}.` : ''
+      const head = created.length ? `Готово: ${created.length}.` : retry.length ? 'Перевод дописан.' : 'Объяснение на карточке.'
       setJob({
         phase: 'done',
         done: skeletons.length,
         total: skeletons.length,
-        message: `Готово: ${skeletons.length}.${imageNote}${dupeNote}`,
+        message: `${head}${created.length ? retryNote : ''}${explainNote}${imageNote}${dupeNote}`,
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Импорт остановился'
-      setJob({ phase: 'error', done: 0, total: skeletons.length, message })
-      toast(message)
+      const kept = saved.some((card) => card.definition)
+      const note = kept ? ' Английское объяснение осталось на карточке.' : ''
+      try {
+        await putCards(saved)
+        remember(mergeCards(cardsRef.current, saved))
+      } catch {
+        // The first save already stored the explanation.
+      }
+      setJob({ phase: 'error', done: 0, total: saved.length, message: message + note })
+      toast(message + note)
     } finally {
       busy.current = false
     }
@@ -301,14 +352,25 @@ export function DeckProvider({ children }: { children: ReactNode }) {
     busy.current = true
     try {
       setJob({ phase: 'text', done: 0, total: 1, message: 'Дополняю карточку…' })
-      const [enriched] = await enrich([{ term: card.term, sentence: card.sentence }], settingsRef.current)
-      let next = applyEnrich(cardsRef.current.find((item) => item.id === id) ?? card, enriched)
+      const [enriched] = await enrich(
+        [{ term: card.term, sentence: card.sentence, gloss: card.definition || undefined }],
+        settingsRef.current,
+      )
+      const base = keepDefinition(cardsRef.current.find((item) => item.id === id) ?? card, card.definition)
+      let next = applyEnrich(base, enriched)
       await updateCard(next)
       if (!next.image && settingsRef.current.imageSource !== 'off') {
         setJob({ phase: 'images', done: 0, total: 1, message: wantsDrawing(next, settingsRef.current) ? 'Рисую картинку…' : 'Ищу фото…' })
         const picture = await pictureFor(next, settingsRef.current)
         if (picture) {
-          next = { ...(cardsRef.current.find((item) => item.id === id) ?? next), image: picture.image, imageCredit: picture.credit, updatedAt: Date.now() }
+          const latest = cardsRef.current.find((item) => item.id === id) ?? next
+          next = {
+            ...latest,
+            definition: latest.definition || next.definition,
+            image: picture.image,
+            imageCredit: picture.credit,
+            updatedAt: Date.now(),
+          }
           await updateCard(next)
         }
       }
@@ -426,19 +488,11 @@ function keyOf(term: string, sentence: string) {
   return `${term.trim().toLowerCase()}|${sentence.trim().toLowerCase()}`
 }
 
-function applyEnrich(card: Card, enriched: Enriched | undefined): Card {
-  if (!enriched) return card
-  return {
-    ...card,
-    partOfSpeech: enriched.partOfSpeech || card.partOfSpeech,
-    translation: enriched.translation || card.translation,
-    sentence: enriched.sentence || card.sentence,
-    sentenceTranslation: enriched.sentenceTranslation || card.sentenceTranslation,
-    imagePrompt: enriched.imagePrompt || card.imagePrompt,
-    imageQuery: enriched.imageQuery || card.imageQuery,
-    abstract: enriched.abstract,
-    updatedAt: Date.now(),
-  }
+function mergeCards(current: Card[], updates: Card[]): Card[] {
+  const map = new Map(updates.map((card) => [card.id, card]))
+  const known = new Set(current.map((card) => card.id))
+  const added = updates.filter((card) => !known.has(card.id))
+  return [...added, ...current.map((card) => map.get(card.id) ?? card)]
 }
 
 const PHOTO_PARALLEL = 4
@@ -464,9 +518,4 @@ async function pictureFor(card: Card, settings: Settings): Promise<{ image: stri
     }
   }
   return findPhoto(card.term)
-}
-
-function replaceCards(current: Card[], updates: Card[]) {
-  const map = new Map(updates.map((card) => [card.id, card]))
-  return current.map((card) => map.get(card.id) ?? card)
 }

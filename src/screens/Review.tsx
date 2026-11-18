@@ -5,10 +5,12 @@ import { gradeCard } from '../lib/card'
 import { formatDue, formatMinutes, todayKey } from '../lib/format'
 import { summarize } from '../lib/queue'
 import { planGrade, returnsInSession } from '../lib/srs'
+import { speakPrompt } from '../lib/play'
 import { speakEnglish, stopSpeaking } from '../lib/speech'
 import { isLeech } from '../lib/stats'
 import { CardArt, ClozeText, MarkTerm, faceOf } from '../ui'
 import { OwnPractice } from './OwnPractice'
+import { SpeakTurn } from './SpeakTurn'
 
 const GRADES: { id: Grade; label: string }[] = [
   { id: 'again', label: 'Снова' },
@@ -18,14 +20,15 @@ const GRADES: { id: Grade; label: string }[] = [
 ]
 
 export function Review() {
-  const { cards, settings, updateCard, logActivity } = useDeck()
+  const { cards, settings, updateCard, updateSettings, logActivity } = useDeck()
   const [boot] = useState(() => {
     const ids = summarize(cards, todayKey(), settings.dailyNewLimit, Date.now()).session.map((card) => card.id)
     return { ids, phase: (ids.length ? 'run' : 'done') as 'run' | 'done' }
   })
   const [queue, setQueue] = useState<string[]>(boot.ids)
   const [flipped, setFlipped] = useState(false)
-  const [phase, setPhase] = useState<'run' | 'done'>(boot.phase)
+  const [phase, setPhase] = useState<'run' | 'speak' | 'done'>(boot.phase)
+  const [speakId, setSpeakId] = useState<string | null>(null)
   const [stats, setStats] = useState({ graded: 0, again: 0 })
   const [undo, setUndo] = useState<{ cardId: string; before: (typeof cards)[number]; queue: string[]; grade: Grade } | null>(null)
   const [now, setNow] = useState(() => Date.now())
@@ -36,6 +39,7 @@ export function Review() {
     setFlipped(false)
     setStats({ graded: 0, again: 0 })
     setUndo(null)
+    setSpeakId(null)
     setPhase(session.length ? 'run' : 'done')
   }
 
@@ -51,7 +55,15 @@ export function Review() {
   }, [undo])
 
   const current = cards.find((card) => card.id === queue[0])
+  const speakCard = cards.find((card) => card.id === speakId)
   const summary = summarize(cards, todayKey(), settings.dailyNewLimit, now)
+
+  useEffect(() => {
+    if (phase !== 'speak') return
+    if (settings.speak && speakCard && speakPrompt(speakCard)) return
+    setSpeakId(null)
+    setPhase(queue.length ? 'run' : 'done')
+  }, [settings.speak, phase, queue.length, speakCard])
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -91,9 +103,22 @@ export function Review() {
     }))
     setFlipped(false)
     setQueue(rest)
-    if (!rest.length) setPhase('done')
+    const aloud = settings.speak && (gradeName === 'again' || gradeName === 'hard') && speakPrompt(current)
+    if (aloud) {
+      setSpeakId(current.id)
+      setPhase('speak')
+    } else if (!rest.length) {
+      setSpeakId(null)
+      setPhase('done')
+    }
     logActivity({ reviews: 1 })
     void updateCard(next)
+  }
+
+  const finishSpeak = () => {
+    stopSpeaking()
+    setSpeakId(null)
+    setPhase(queue.length ? 'run' : 'done')
   }
 
   const undoGrade = () => {
@@ -101,6 +126,7 @@ export function Review() {
     void updateCard(undo.before)
     setQueue(undo.queue)
     setPhase('run')
+    setSpeakId(null)
     setFlipped(false)
     setStats((item) => ({
       graded: Math.max(0, item.graded - 1),
@@ -109,10 +135,20 @@ export function Review() {
     setUndo(null)
   }
 
+  if (phase === 'speak' && speakCard && speakPrompt(speakCard)) {
+    return (
+      <section className="review">
+        <SpeakSwitch speak={settings.speak} onChange={(speak) => updateSettings({ ...settings, speak })} />
+        <SpeakTurn key={speakCard.id} card={speakCard} onDone={finishSpeak} />
+      </section>
+    )
+  }
+
   if (phase === 'done' || !current) {
     return (
       <section className="panel done">
         <p className="eyebrow">{stats.graded ? 'Сессия' : 'Повтор'}</p>
+        <SpeakSwitch speak={settings.speak} onChange={(speak) => updateSettings({ ...settings, speak })} />
         <h1>{summary.session.length ? 'Есть что повторить' : 'На сейчас всё'}</h1>
         {stats.graded > 0 && (
           <p className="lead">Разобрано {stats.graded}. Снова: {stats.again}.</p>
@@ -134,6 +170,7 @@ export function Review() {
             <button className="primary" type="button" onClick={begin}>Повторить</button>
           )}
           <a className="ghost" href="#/import">К импорту</a>
+          {cards.some((card) => card.translation.trim()) && <a className="ghost" href="#/play">Погонять слова</a>}
           {undo && <button className="ghost" type="button" onClick={undoGrade}>Отменить оценку</button>}
         </div>
       </section>
@@ -146,6 +183,7 @@ export function Review() {
 
   return (
     <section className="review">
+      <SpeakSwitch speak={settings.speak} onChange={(speak) => updateSettings({ ...settings, speak })} />
       <div className="review-meta">
         <span>осталось {queue.length}</span>
         <span>новые {Math.min(summary.used, settings.dailyNewLimit)}/{settings.dailyNewLimit}</span>
@@ -208,5 +246,17 @@ export function Review() {
       )}
       {undo && <button className="text-button" type="button" onClick={undoGrade}>Отменить последнюю оценку</button>}
     </section>
+  )
+}
+
+function SpeakSwitch({ speak, onChange }: { speak: boolean; onChange: (speak: boolean) => void }) {
+  return (
+    <div className="speak-switch">
+      <div className="segmented" role="radiogroup" aria-label="Говорение">
+        <button type="button" role="radio" aria-checked={speak} className={speak ? 'on' : ''} onClick={() => onChange(true)}>Вслух</button>
+        <button type="button" role="radio" aria-checked={!speak} className={speak ? '' : 'on'} onClick={() => onChange(false)}>Молча</button>
+      </div>
+      <p className="hint">{speak ? 'После «Снова» и «Трудно» нужно сказать фразу.' : 'Ночной режим: только карточки, без фразы вслух.'}</p>
+    </div>
   )
 }
