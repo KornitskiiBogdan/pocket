@@ -6,6 +6,7 @@ const KEY = 'pocket.settings'
 
 export const DEFAULT_SETTINGS: Settings = {
   gigachatKey: '',
+  tokenProxy: '',
   kandinskyKey: '',
   kandinskySecret: '',
   textModel: 'GigaChat-2-Pro',
@@ -31,6 +32,7 @@ export function loadSettings(): Settings {
       ...DEFAULT_SETTINGS,
       ...rest,
       gigachatKey: typeof parsed.gigachatKey === 'string' ? parsed.gigachatKey : '',
+      tokenProxy: typeof parsed.tokenProxy === 'string' ? parsed.tokenProxy.trim() : '',
       kandinskyKey: typeof parsed.kandinskyKey === 'string' ? parsed.kandinskyKey : '',
       kandinskySecret: typeof parsed.kandinskySecret === 'string' ? parsed.kandinskySecret : '',
       textModel: textModel(parsed.textModel, DEFAULT_SETTINGS.textModel),
@@ -58,6 +60,7 @@ export function saveSettings(settings: Settings) {
     fastModel: textModel(settings.fastModel, DEFAULT_SETTINGS.fastModel),
     dailyNewLimit: clampLimit(settings.dailyNewLimit),
     gigachatKey: settings.gigachatKey.trim(),
+    tokenProxy: settings.tokenProxy.trim(),
     kandinskyKey: settings.kandinskyKey.trim(),
     kandinskySecret: settings.kandinskySecret.trim(),
   }

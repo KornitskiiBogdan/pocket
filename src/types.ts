@@ -88,6 +88,8 @@ export type ImageSource = 'smart' | 'photo' | 'off'
 export interface Settings {
   /** GigaChat authorization key. Text requests use it; it never goes into the deck file. */
   gigachatKey: string
+  /** Laptop address that exchanges the authorization key for a short token. Stays on this device. */
+  tokenProxy: string
   /** FusionBrain API key. Drawings for abstract words; never exported. */
   kandinskyKey: string
   /** FusionBrain secret key. Paired with kandinskyKey; never exported. */

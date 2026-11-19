@@ -56,7 +56,7 @@ export async function pingGigaChat(settings: Settings): Promise<void> {
 }
 
 async function completeNow(prompt: string, settings: Settings, model: string, schema: object | null): Promise<string> {
-  const token = await accessToken(settings.gigachatKey)
+  const token = await accessToken(settings.gigachatKey, settings.tokenProxy)
   const body: Record<string, unknown> = {
     model,
     messages: [{ role: 'user', content: prompt }],
@@ -80,7 +80,7 @@ async function completeNow(prompt: string, settings: Settings, model: string, sc
   }
   if (response.status === 401) {
     cached = null
-    const fresh = await accessToken(settings.gigachatKey, true)
+    const fresh = await accessToken(settings.gigachatKey, settings.tokenProxy, true)
     try {
       response = await fetch(CHAT_URL, {
         method: 'POST',
@@ -102,30 +102,45 @@ async function completeNow(prompt: string, settings: Settings, model: string, sc
   return content
 }
 
-async function accessToken(key: string, force = false): Promise<string> {
+/** The laptop server exchanges the long key. Empty means the page calls Sber itself. */
+export function proxyTokenUrl(proxy: string): string | null {
+  let trimmed = proxy.trim().replace(/\/+$/, '')
+  if (!trimmed) return null
+  if (!/^https?:\/\//i.test(trimmed)) trimmed = `https://${trimmed}`
+  return `${trimmed}/token`
+}
+
+async function accessToken(key: string, proxy: string, force = false): Promise<string> {
   const direct = directAccessToken(key)
   if (direct) return direct
   const auth = basicAuthorization(key)
   if (!auth.replace(/^Basic\s+/i, '').trim()) throw new GigaChatError('Нет ключа GigaChat')
   const now = Date.now()
   if (!force && cached && cached.key === auth && cached.expiresAt - 60_000 > now) return cached.token
+  const proxyUrl = proxyTokenUrl(proxy)
   let response: Response
   try {
-    response = await fetch(OAUTH_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        Accept: 'application/json',
-        RqUID: crypto.randomUUID(),
-        Authorization: auth,
-      },
-      body: 'scope=GIGACHAT_API_PERS',
-    })
+    response = proxyUrl
+      ? await fetch(proxyUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ key: key.trim() }),
+        })
+      : await fetch(OAUTH_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            Accept: 'application/json',
+            RqUID: crypto.randomUUID(),
+            Authorization: auth,
+          },
+          body: 'scope=GIGACHAT_API_PERS',
+        })
   } catch {
-    throw unreachable()
+    throw proxyUrl ? proxyUnreachable() : unreachable()
   }
   const text = await response.text()
-  if (!response.ok) throw httpError(response.status, false)
+  if (!response.ok) throw proxyUrl ? proxyError(text, response.status) : httpError(response.status, false)
   const body = parseJson(text)
   const token = body && typeof body === 'object' ? (body as { access_token?: unknown }).access_token : ''
   if (typeof token !== 'string' || !token.trim()) throw new GigaChatError('GigaChat не выдал доступ')
@@ -140,6 +155,22 @@ function modelOf(settings: Settings, tier: 'smart' | 'fast'): string {
 
 function unreachable(): GigaChatError {
   return new GigaChatError('Браузер не открыл обмен ключа на порту 9443. Короткий токен получить не удалось.')
+}
+
+function proxyUnreachable(): GigaChatError {
+  return new GigaChatError('Сервер токена на ноутбуке не ответил. Он должен быть запущен, а телефон — в той же сети Wi-Fi.')
+}
+
+function proxyError(text: string, status: number): GigaChatError {
+  const body = (() => {
+    try {
+      return JSON.parse(text) as { error?: unknown }
+    } catch {
+      return null
+    }
+  })()
+  if (body && typeof body.error === 'string' && body.error.trim()) return new GigaChatError(body.error)
+  return httpError(status, false)
 }
 
 function httpError(status: number, schema: boolean): GigaChatError {

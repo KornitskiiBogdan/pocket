@@ -68,7 +68,18 @@ export function Settings() {
           placeholder="Ключ авторизации"
         />
       </label>
-      <p className="hint">Вставьте ключ авторизации из кабинета GigaChat, кнопка «Получить ключ». Приложение само меняет его на короткий токен. Ключ остаётся только в этом браузере и в файл колоды не попадает. Нужен сертификат Минцифры или Яндекс Браузер.</p>
+      <p className="hint">Вставьте ключ авторизации из кабинета GigaChat, кнопка «Получить ключ». Короткий токен берёт сервер на ноутбуке, если ниже указан его адрес. Ключ остаётся только в этом браузере и в файл колоды не попадает. Для запросов к модели нужен сертификат Минцифры или Яндекс Браузер.</p>
+      <label className="field">
+        <span>Сервер токена</span>
+        <input
+          value={settings.tokenProxy}
+          autoComplete="off"
+          spellCheck={false}
+          onChange={(event) => updateSettings({ ...settings, tokenProxy: event.target.value })}
+          placeholder="https://192.168.0.10:8443"
+        />
+      </label>
+      <p className="hint">Адрес из окна сервера на ноутбуке. Ноутбук должен быть включён, телефон — в той же сети Wi-Fi. Сертификат для телефона один раз скачивается по http с портом 8787, файл ca.cer.</p>
       <div className="row-actions">
         <button
           className="ghost"
@@ -234,7 +245,7 @@ export function Settings() {
           <strong>{backupAt ? `Копия от ${BACKUP_DATE.format(backupAt)}` : 'Копий ещё не было'}</strong>
           <span>
             {storage?.usage ? `Занято ${formatBytes(storage.usage)}. ` : ''}
-            Копия — один JSON с карточками, картинками, текстами и временем по дням. Ключи GigaChat и Kandinsky в неё не попадают.
+            Копия — один JSON с карточками, картинками, текстами и временем по дням. Ключи GigaChat и Kandinsky и адрес сервера токена в неё не попадают.
           </span>
         </li>
       </ul>

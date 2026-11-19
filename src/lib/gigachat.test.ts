@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { basicAuthorization, contentFrom, directAccessToken, expiryMs } from './gigachat'
+import { basicAuthorization, contentFrom, directAccessToken, expiryMs, proxyTokenUrl } from './gigachat'
 import { DEFAULT_SETTINGS, textModel } from './settings'
 
 describe('basicAuthorization', () => {
@@ -15,6 +15,14 @@ describe('directAccessToken', () => {
     expect(directAccessToken('eyJhbGci.payload.sig')).toBe('eyJhbGci.payload.sig')
     expect(directAccessToken('Bearer eyJhbGci.payload.sig')).toBe('eyJhbGci.payload.sig')
     expect(directAccessToken('NmYwYjEyOTE')).toBeNull()
+  })
+})
+
+describe('proxyTokenUrl', () => {
+  it('points the long key at the laptop token server', () => {
+    expect(proxyTokenUrl('')).toBeNull()
+    expect(proxyTokenUrl(' https://192.168.0.10:8443/ ')).toBe('https://192.168.0.10:8443/token')
+    expect(proxyTokenUrl('192.168.0.10:8443')).toBe('https://192.168.0.10:8443/token')
   })
 })
 
