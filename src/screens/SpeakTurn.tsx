@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { Card } from '../types'
 import { useDeck } from '../context'
 import { checkSentence, type SentenceCheck } from '../lib/gemini'
+import { hasYandex } from '../lib/yandex'
 import { matchesTerm, speakPrompt } from '../lib/play'
 import { canDictate, dictate, speakEnglish } from '../lib/speech'
 
@@ -53,7 +54,7 @@ export function SpeakTurn({ card, onDone }: { card: Card; onDone: () => void }) 
       setRevealed(true)
       return
     }
-    if (!settings.gigachatKey) {
+    if (!hasYandex(settings)) {
       const ok = said.toLowerCase().includes(card.term.trim().toLowerCase())
       setResult({
         ok,

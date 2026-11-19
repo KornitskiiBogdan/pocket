@@ -2,7 +2,7 @@ import { useState } from 'react'
 import type { Card } from '../types'
 import { useDeck } from '../context'
 import { localImagePrompt } from '../lib/gemini'
-import { drawGigaChat, GigaChatError } from '../lib/gigachat'
+import { drawYandex, hasYandex, YandexError } from '../lib/yandex'
 import { fetchPhoto, searchPhotos, type PhotoHit } from '../lib/photos'
 
 export function PhotoPicker({ card }: { card: Card }) {
@@ -37,9 +37,9 @@ export function PhotoPicker({ card }: { card: Card }) {
   const draw = async () => {
     setDrawing(true)
     try {
-      await attachImage(card.id, await drawGigaChat(card.imagePrompt || localImagePrompt(card.term, card.sentence), settings), 'GigaChat')
+      await attachImage(card.id, await drawYandex(card.imagePrompt || localImagePrompt(card.term, card.sentence), settings), 'Яндекс')
     } catch (error) {
-      toast(error instanceof GigaChatError || error instanceof Error ? error.message : 'Картинка не вышла')
+      toast(error instanceof YandexError || error instanceof Error ? error.message : 'Картинка не вышла')
     } finally {
       setDrawing(false)
     }
@@ -57,9 +57,9 @@ export function PhotoPicker({ card }: { card: Card }) {
         <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="что должно быть на фото, по-английски" aria-label="Поиск фото" />
         <button className="ghost" type="submit" disabled={searching || !query.trim()}>{searching ? 'Ищу…' : 'Найти фото'}</button>
       </form>
-      {settings.gigachatKey.trim() && (
+      {hasYandex(settings) && (
         <button className="text-button" type="button" disabled={drawing} onClick={() => { void draw() }}>
-          {drawing ? 'Рисую…' : 'Нарисовать в GigaChat'}
+          {drawing ? 'Рисую…' : 'Нарисовать в Яндексе'}
         </button>
       )}
       {hits && hits.length === 0 && <p className="hint">Ничего не нашлось. Попробуйте конкретнее: кто, что делает, где.</p>}

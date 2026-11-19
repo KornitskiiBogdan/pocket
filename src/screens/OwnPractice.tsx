@@ -3,6 +3,7 @@ import type { Card } from '../types'
 import { useDeck } from '../context'
 import { MINE_LIMIT } from '../lib/card'
 import { checkSentence, type SentenceCheck } from '../lib/gemini'
+import { hasYandex } from '../lib/yandex'
 import { canDictate, dictate, speakEnglish } from '../lib/speech'
 
 export function OwnPractice({ card }: { card: Card }) {
@@ -37,8 +38,8 @@ export function OwnPractice({ card }: { card: Card }) {
   const check = async () => {
     const sentence = text.trim()
     if (!sentence) return
-    if (!settings.gigachatKey) {
-      setFailure('Для проверки нужен ключ GigaChat в настройках')
+    if (!hasYandex(settings)) {
+      setFailure('Для проверки нужны ключ Яндекса, каталог и адрес функции')
       return
     }
     setChecking(true)

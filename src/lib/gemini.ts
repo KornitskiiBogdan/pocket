@@ -1,5 +1,5 @@
 import type { Settings } from '../types'
-import { complete } from './gigachat'
+import { complete } from './yandex'
 import { DEFAULT_SETTINGS, textModel } from './settings'
 
 export interface Enriched {
@@ -157,7 +157,7 @@ Return JSON: "title" — a short English title, "paragraphs" — the paragraphs 
   const paragraphs = Array.isArray(raw.paragraphs)
     ? raw.paragraphs.filter((item): item is string => typeof item === 'string' && item.trim() !== '').map((item) => item.trim())
     : []
-  if (!paragraphs.length) throw new Error('GigaChat не прислал текст')
+  if (!paragraphs.length) throw new Error('Яндекс не прислал текст')
   return { title: clip(raw.title, 120) || request.topic || 'Текст', body: paragraphs.join('\n\n') }
 }
 
@@ -194,7 +194,7 @@ ${JSON.stringify(paragraphs)}`
   const russian = Array.isArray(raw.paragraphs)
     ? raw.paragraphs.filter((item): item is string => typeof item === 'string' && item.trim() !== '').map((item) => item.trim())
     : []
-  if (!russian.length) throw new Error('GigaChat не прислал перевод')
+  if (!russian.length) throw new Error('Яндекс не прислал перевод')
   return russian.join('\n\n')
 }
 

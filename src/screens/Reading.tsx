@@ -3,6 +3,7 @@ import type { Card, ReadingText, TextOrigin } from '../types'
 import { useDeck } from '../context'
 import { cleanTranscript } from '../lib/bbc'
 import { generateReading, textParagraphs, translateReading } from '../lib/gemini'
+import { hasYandex } from '../lib/yandex'
 import { draftsFromSelection, parseArticle, type PassageSentence } from '../lib/parse'
 import { findPhrase, knownIds, wordCount } from '../lib/reader'
 import { LEARNED_MINUTES } from '../lib/stats'
@@ -10,7 +11,7 @@ import { LEARNED_MINUTES } from '../lib/stats'
 const ORIGIN_LABEL: Record<TextOrigin, string> = {
   mine: 'свой',
   bbc: '6 Minute English',
-  ai: 'GigaChat',
+  ai: 'Яндекс',
   starter: 'стартовый',
 }
 
@@ -34,7 +35,7 @@ function Library() {
         <a className="primary" href="#/read/new">Добавить текст</a>
       </div>
       {sorted.length === 0 ? (
-        <p className="lead">Пока пусто. Вставьте выпуск 6 Minute English или попросите GigaChat написать текст.</p>
+        <p className="lead">Пока пусто. Вставьте выпуск 6 Minute English или попросите Яндекс написать текст.</p>
       ) : (
         <ul className="library">
           {sorted.map((text) => {
@@ -93,8 +94,8 @@ function NewText() {
   }
 
   const generate = async () => {
-    if (!settings.gigachatKey) {
-      setFailure('Для генерации нужен ключ GigaChat в настройках')
+    if (!hasYandex(settings)) {
+      setFailure('Для генерации нужны ключ Яндекса, каталог и адрес функции')
       return
     }
     setBusy(true)
@@ -126,7 +127,7 @@ function NewText() {
       <h1>Новый текст</h1>
       <div className="segmented" role="tablist">
         <button type="button" className={mode === 'paste' ? 'on' : ''} onClick={() => setMode('paste')}>Вставить</button>
-        <button type="button" className={mode === 'generate' ? 'on' : ''} onClick={() => setMode('generate')}>Написать с GigaChat</button>
+        <button type="button" className={mode === 'generate' ? 'on' : ''} onClick={() => setMode('generate')}>Написать с Яндексом</button>
       </div>
       {mode === 'paste' ? (
         <>
@@ -263,8 +264,8 @@ function Reader({ id }: { id: string }) {
       setShowTranslation(true)
       return
     }
-    if (!settings.gigachatKey) {
-      setTranslateError('Для перевода нужен ключ GigaChat в настройках')
+    if (!hasYandex(settings)) {
+      setTranslateError('Для перевода нужны ключ Яндекса, каталог и адрес функции')
       return
     }
     setTranslating(true)

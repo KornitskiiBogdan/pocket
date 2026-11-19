@@ -5,12 +5,13 @@ const DIRECTIONS = new Set<Direction>(['cloze', 'reverse', 'mix'])
 const KEY = 'pocket.settings'
 
 export const DEFAULT_SETTINGS: Settings = {
-  gigachatKey: '',
-  tokenProxy: '',
+  yandexKey: '',
+  yandexFolder: '',
+  yandexFunction: '',
   kandinskyKey: '',
   kandinskySecret: '',
-  textModel: 'GigaChat-2-Pro',
-  fastModel: 'GigaChat-2',
+  textModel: 'aliceai-llm',
+  fastModel: 'aliceai-llm-flash',
   dailyNewLimit: 8,
   imageSource: 'smart',
   direction: 'mix',
@@ -18,21 +19,31 @@ export const DEFAULT_SETTINGS: Settings = {
   speak: true,
 }
 
-type StoredSettings = Partial<Settings> & { imagesOnImport?: boolean; apiKey?: string; imageModel?: string; imageSource?: string }
+type StoredSettings = Partial<Settings> & {
+  imagesOnImport?: boolean
+  apiKey?: string
+  imageModel?: string
+  imageSource?: string
+  gigachatKey?: string
+  tokenProxy?: string
+}
 
 export function loadSettings(): Settings {
   try {
     const raw = localStorage.getItem(KEY)
     if (!raw) return { ...DEFAULT_SETTINGS }
     const parsed = JSON.parse(raw) as StoredSettings
-    const { imagesOnImport, apiKey, imageModel, imageSource, ...rest } = parsed
+    const { imagesOnImport, apiKey, imageModel, imageSource, gigachatKey, tokenProxy, ...rest } = parsed
     void apiKey
     void imageModel
+    void gigachatKey
+    void tokenProxy
     const next: Settings = {
       ...DEFAULT_SETTINGS,
       ...rest,
-      gigachatKey: typeof parsed.gigachatKey === 'string' ? parsed.gigachatKey : '',
-      tokenProxy: typeof parsed.tokenProxy === 'string' ? parsed.tokenProxy.trim() : '',
+      yandexKey: typeof parsed.yandexKey === 'string' ? parsed.yandexKey : '',
+      yandexFolder: typeof parsed.yandexFolder === 'string' ? parsed.yandexFolder.trim() : '',
+      yandexFunction: typeof parsed.yandexFunction === 'string' ? parsed.yandexFunction.trim() : '',
       kandinskyKey: typeof parsed.kandinskyKey === 'string' ? parsed.kandinskyKey : '',
       kandinskySecret: typeof parsed.kandinskySecret === 'string' ? parsed.kandinskySecret : '',
       textModel: textModel(parsed.textModel, DEFAULT_SETTINGS.textModel),
@@ -59,8 +70,9 @@ export function saveSettings(settings: Settings) {
     textModel: textModel(settings.textModel, DEFAULT_SETTINGS.textModel),
     fastModel: textModel(settings.fastModel, DEFAULT_SETTINGS.fastModel),
     dailyNewLimit: clampLimit(settings.dailyNewLimit),
-    gigachatKey: settings.gigachatKey.trim(),
-    tokenProxy: settings.tokenProxy.trim(),
+    yandexKey: settings.yandexKey.trim(),
+    yandexFolder: settings.yandexFolder.trim(),
+    yandexFunction: settings.yandexFunction.trim(),
     kandinskyKey: settings.kandinskyKey.trim(),
     kandinskySecret: settings.kandinskySecret.trim(),
   }
@@ -68,10 +80,10 @@ export function saveSettings(settings: Settings) {
   return next
 }
 
-/** Gemini names left in older settings are not valid GigaChat models. */
+/** Older Gemini and GigaChat names are not Yandex models. */
 export function textModel(model: string | undefined, fallback: string): string {
   const name = model?.trim()
-  if (!name || name.startsWith('gemini')) return fallback
+  if (!name || /^(gemini|gigachat)/i.test(name)) return fallback
   return name
 }
 

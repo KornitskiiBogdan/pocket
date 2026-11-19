@@ -7,6 +7,7 @@ import { mergeByRecency, normalizeCard, normalizeText, parseDeckFile, serializeD
 import { lastBackup, requestPersistence, saveBackup } from './lib/storage'
 import { todayKey } from './lib/format'
 import { enrich } from './lib/gemini'
+import { hasYandex } from './lib/yandex'
 import { findPhoto } from './lib/photos'
 import { loadSettings, saveSettings } from './lib/settings'
 import { starterTexts } from './lib/starter'
@@ -247,11 +248,11 @@ export function DeckProvider({ children }: { children: ReactNode }) {
       if (created.length) logActivity({ added: created.length })
 
       const currentSettings = settingsRef.current
-      if (!currentSettings.gigachatKey || !enrichItems.length) {
+      if (!hasYandex(currentSettings) || !enrichItems.length) {
         const added = created.length ? `Добавлено ${created.length}. ` : ''
-        const translated = currentSettings.gigachatKey || !enrichItems.length
+        const translated = hasYandex(currentSettings) || !enrichItems.length
           ? ''
-          : 'Без ключа GigaChat перевод не заполнился.'
+          : 'Без ключа Яндекса перевод не заполнился.'
         const extra = explain.length ? ` Объяснение дописано: ${explain.length}.` : ''
         setJob({
           phase: 'done',
@@ -341,8 +342,8 @@ export function DeckProvider({ children }: { children: ReactNode }) {
     if (busy.current) return
     const card = cardsRef.current.find((item) => item.id === id)
     if (!card) return
-    if (!settingsRef.current.gigachatKey) {
-      toast('Сначала вставьте ключ GigaChat в настройках')
+    if (!hasYandex(settingsRef.current)) {
+      toast('Сначала укажите ключ Яндекса, каталог и адрес функции')
       return
     }
     busy.current = true

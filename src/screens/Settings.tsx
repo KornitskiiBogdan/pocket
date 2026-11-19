@@ -3,7 +3,7 @@ import type { Direction, ImageSource } from '../types'
 import { useDeck } from '../context'
 import { formatMinutes, plural } from '../lib/format'
 import { formatBytes, isInstalled, storageStatus, type StorageStatus } from '../lib/storage'
-import { pingGigaChat } from '../lib/gigachat'
+import { pingYandex } from '../lib/yandex'
 import { kandinskyDrawnThisMonth, pingKandinsky } from '../lib/kandinsky'
 import { LADDER_MINUTES } from '../lib/srs'
 import { clampGoal, clampLimit, DEFAULT_SETTINGS, textModel } from '../lib/settings'
@@ -15,7 +15,7 @@ const DIRECTIONS: { id: Direction; label: string; hint: string }[] = [
 ]
 
 const IMAGE_SOURCES: { id: ImageSource; label: string; hint: string }[] = [
-  { id: 'smart', label: 'Фото + рисунок', hint: 'При импорте все слова получают бесплатное фото. Рисунок GigaChat появляется только по кнопке «Нарисовать в GigaChat» на карточке.' },
+  { id: 'smart', label: 'Фото + рисунок', hint: 'При импорте все слова получают бесплатное фото. Рисунок Яндекса появляется только по кнопке «Нарисовать в Яндексе» на карточке.' },
   { id: 'photo', label: 'Только фото', hint: 'Бесплатно и быстро: фото ищется по самому слову в открытых библиотеках Openverse и Wikimedia. Если не подошло, в карточке можно вписать другой запрос.' },
   { id: 'off', label: 'Без картинок', hint: 'Карточки без картинок. Свою можно добавить вручную в редактировании.' },
 ]
@@ -58,42 +58,51 @@ export function Settings() {
       <p className="eyebrow">Настройки</p>
       <h1>Ключ, ритм, файл</h1>
       <label className="field">
-        <span>Ключ GigaChat</span>
+        <span>Ключ Яндекса</span>
         <input
           type={showKey ? 'text' : 'password'}
-          value={settings.gigachatKey}
+          value={settings.yandexKey}
           autoComplete="off"
           spellCheck={false}
-          onChange={(event) => updateSettings({ ...settings, gigachatKey: event.target.value })}
-          placeholder="Ключ авторизации"
+          onChange={(event) => updateSettings({ ...settings, yandexKey: event.target.value })}
+          placeholder="API-ключ"
         />
       </label>
-      <p className="hint">Вставьте ключ авторизации из кабинета GigaChat, кнопка «Получить ключ». Короткий токен берёт сервер на ноутбуке, если ниже указан его адрес. Ключ остаётся только в этом браузере и в файл колоды не попадает. Для запросов к модели нужен сертификат Минцифры или Яндекс Браузер.</p>
       <label className="field">
-        <span>Сервер токена</span>
+        <span>Каталог Яндекса</span>
         <input
-          value={settings.tokenProxy}
+          value={settings.yandexFolder}
           autoComplete="off"
           spellCheck={false}
-          onChange={(event) => updateSettings({ ...settings, tokenProxy: event.target.value })}
-          placeholder="https://192.168.0.10:8443"
+          onChange={(event) => updateSettings({ ...settings, yandexFolder: event.target.value })}
+          placeholder="идентификатор каталога"
         />
       </label>
-      <p className="hint">Адрес из окна сервера на ноутбуке. Ноутбук должен быть включён, телефон — в той же сети Wi-Fi. Сертификат для телефона один раз скачивается по http с портом 8787, файл ca.cer.</p>
+      <label className="field">
+        <span>Функция Яндекса</span>
+        <input
+          value={settings.yandexFunction}
+          autoComplete="off"
+          spellCheck={false}
+          onChange={(event) => updateSettings({ ...settings, yandexFunction: event.target.value })}
+          placeholder="https://functions.yandexcloud.net/…"
+        />
+      </label>
+      <p className="hint">Ключ и каталог из Yandex AI Studio. Адрес — публичная функция Cloud Functions. Они остаются только в этом браузере и в файл колоды не попадают. Карточки по-прежнему лежат в телефоне.</p>
       <div className="row-actions">
         <button
           className="ghost"
           type="button"
-          disabled={checking !== null || !settings.gigachatKey.trim()}
+          disabled={checking !== null || !settings.yandexKey.trim() || !settings.yandexFolder.trim() || !settings.yandexFunction.trim()}
           onClick={() => {
             setChecking('giga')
-            pingGigaChat(settings)
-              .then(() => toast('GigaChat отвечает'))
+            pingYandex(settings)
+              .then(() => toast('Яндекс отвечает'))
               .catch((error: Error) => toast(error.message))
               .finally(() => setChecking(null))
           }}
         >
-          {checking === 'giga' ? 'Проверяю…' : 'Проверить GigaChat'}
+          {checking === 'giga' ? 'Проверяю…' : 'Проверить Яндекс'}
         </button>
       </div>
       <label className="check">
@@ -178,7 +187,7 @@ export function Settings() {
             placeholder="Secret из FusionBrain"
           />
         </label>
-        <p className="hint">FusionBrain больше не отвечает. Абстрактные слова рисует GigaChat. Эти два поля можно не заполнять.</p>
+        <p className="hint">FusionBrain больше не отвечает. Рисунок по кнопке делает Яндекс. Эти два поля можно не заполнять.</p>
         <div className="row-actions">
           <button
             className="ghost"
@@ -203,6 +212,7 @@ export function Settings() {
       </div>
       <details className="models">
         <summary>Модели</summary>
+        <p className="hint">Карточки переводит быстрая модель. Тексты для чтения и проверка ваших фраз идут через сильную Alice AI LLM.</p>
         <label className="field">
           <span>Перевод карточек (быстрая)</span>
           <input value={textModel(settings.fastModel, DEFAULT_SETTINGS.fastModel)} onChange={(event) => updateSettings({ ...settings, fastModel: event.target.value.trim() })} />
@@ -245,7 +255,7 @@ export function Settings() {
           <strong>{backupAt ? `Копия от ${BACKUP_DATE.format(backupAt)}` : 'Копий ещё не было'}</strong>
           <span>
             {storage?.usage ? `Занято ${formatBytes(storage.usage)}. ` : ''}
-            Копия — один JSON с карточками, картинками, текстами и временем по дням. Ключи GigaChat и Kandinsky и адрес сервера токена в неё не попадают.
+            Копия — один JSON с карточками, картинками, текстами и временем по дням. Ключ Яндекса, каталог, адрес функции и ключи Kandinsky в неё не попадают.
           </span>
         </li>
       </ul>
