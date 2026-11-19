@@ -2,7 +2,7 @@ import { useState } from 'react'
 import type { Card } from '../types'
 import { useDeck } from '../context'
 import { localImagePrompt } from '../lib/gemini'
-import { drawKandinsky, hasKandinskyKeys, KandinskyError } from '../lib/kandinsky'
+import { drawGigaChat, GigaChatError } from '../lib/gigachat'
 import { fetchPhoto, searchPhotos, type PhotoHit } from '../lib/photos'
 
 export function PhotoPicker({ card }: { card: Card }) {
@@ -34,12 +34,12 @@ export function PhotoPicker({ card }: { card: Card }) {
     }
   }
 
-  const drawWithKandinsky = async () => {
+  const draw = async () => {
     setDrawing(true)
     try {
-      await attachImage(card.id, await drawKandinsky(card.imagePrompt || localImagePrompt(card.term, card.sentence), settings), 'Kandinsky')
+      await attachImage(card.id, await drawGigaChat(card.imagePrompt || localImagePrompt(card.term, card.sentence), settings), 'GigaChat')
     } catch (error) {
-      toast(error instanceof KandinskyError || error instanceof Error ? error.message : 'Картинка не вышла')
+      toast(error instanceof GigaChatError || error instanceof Error ? error.message : 'Картинка не вышла')
     } finally {
       setDrawing(false)
     }
@@ -57,9 +57,9 @@ export function PhotoPicker({ card }: { card: Card }) {
         <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="что должно быть на фото, по-английски" aria-label="Поиск фото" />
         <button className="ghost" type="submit" disabled={searching || !query.trim()}>{searching ? 'Ищу…' : 'Найти фото'}</button>
       </form>
-      {hasKandinskyKeys(settings) && (
-        <button className="text-button" type="button" disabled={drawing} onClick={() => { void drawWithKandinsky() }}>
-          {drawing ? 'Рисую…' : 'Нарисовать в Kandinsky'}
+      {settings.gigachatKey.trim() && (
+        <button className="text-button" type="button" disabled={drawing} onClick={() => { void draw() }}>
+          {drawing ? 'Рисую…' : 'Нарисовать в GigaChat'}
         </button>
       )}
       {hits && hits.length === 0 && <p className="hint">Ничего не нашлось. Попробуйте конкретнее: кто, что делает, где.</p>}

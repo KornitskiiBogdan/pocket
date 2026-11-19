@@ -1,4 +1,7 @@
 import type { Settings } from '../types'
+import { shrinkDataUrl } from './image'
+
+const FILES_URL = 'https://api.giga.chat/v1/files/'
 
 const OAUTH_URL = 'https://ngw.devices.sberbank.ru:9443/api/v2/oauth'
 const CHAT_URL = 'https://api.giga.chat/v1/chat/completions'
@@ -44,6 +47,16 @@ export function contentFrom(body: unknown): string {
   if (!Array.isArray(choices) || !choices[0] || typeof choices[0] !== 'object') return ''
   const content = (choices[0] as { message?: { content?: unknown } }).message?.content
   return typeof content === 'string' ? content : ''
+}
+
+/** The file id sits in `<img src="uuid" fuse="true"/>` inside the model reply. */
+export function imageIdFrom(content: string): string | null {
+  const match = /<img\b[^>]*\bsrc=["']([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})["']/i.exec(content)
+  return match ? match[1] : null
+}
+
+export async function drawGigaChat(prompt: string, settings: Settings): Promise<string> {
+  return oneAtATime(() => drawNow(prompt, settings))
 }
 
 export async function complete(prompt: string, settings: Settings, model: string, schema: object | null): Promise<string> {
@@ -147,6 +160,89 @@ async function accessToken(key: string, proxy: string, force = false): Promise<s
   const expiresAt = expiryMs(body && typeof body === 'object' ? (body as { expires_at?: unknown }).expires_at : 0)
   cached = { key: auth, token, expiresAt }
   return token
+}
+
+async function drawNow(prompt: string, settings: Settings): Promise<string> {
+  const clipped = prompt.replace(/\s+/g, ' ').trim().slice(0, 900)
+  const body = {
+    model: modelOf(settings, 'smart'),
+    messages: [
+      { role: 'system', content: 'Ты рисуешь одну простую учебную картинку. На картинке не должно быть букв и надписей.' },
+      { role: 'user', content: `Нарисуй: ${clipped}` },
+    ],
+    function_call: 'auto',
+    stream: false,
+    temperature: 0.4,
+  }
+  const text = await postChat(settings, body)
+  const id = imageIdFrom(text)
+  if (!id) throw new GigaChatError('GigaChat не прислал картинку')
+  const bytes = await downloadFile(settings, id)
+  return shrinkDataUrl(bytesToDataUrl(bytes))
+}
+
+async function postChat(settings: Settings, body: Record<string, unknown>): Promise<string> {
+  let token = await accessToken(settings.gigachatKey, settings.tokenProxy)
+  let response = await sendChat(token, body)
+  if (response.status === 401) {
+    cached = null
+    token = await accessToken(settings.gigachatKey, settings.tokenProxy, true)
+    response = await sendChat(token, body)
+  }
+  const text = await response.text()
+  if (!response.ok) throw httpError(response.status, false)
+  const content = contentFrom(parseJson(text))
+  if (!content.trim()) throw new GigaChatError('GigaChat вернул пустой ответ')
+  return content
+}
+
+async function sendChat(token: string, body: Record<string, unknown>): Promise<Response> {
+  try {
+    return await fetch(CHAT_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify(body),
+    })
+  } catch {
+    throw unreachable()
+  }
+}
+
+async function downloadFile(settings: Settings, id: string): Promise<Uint8Array> {
+  let token = await accessToken(settings.gigachatKey, settings.tokenProxy)
+  let response = await fetchFile(token, id)
+  if (response.status === 401) {
+    cached = null
+    token = await accessToken(settings.gigachatKey, settings.tokenProxy, true)
+    response = await fetchFile(token, id)
+  }
+  if (!response.ok) throw httpError(response.status, false)
+  const bytes = new Uint8Array(await response.arrayBuffer())
+  if (!bytes.length) throw new GigaChatError('GigaChat не прислал картинку')
+  return bytes
+}
+
+async function fetchFile(token: string, id: string): Promise<Response> {
+  try {
+    return await fetch(`${FILES_URL}${id}/content`, {
+      headers: { Authorization: `Bearer ${token}`, Accept: 'image/jpeg' },
+    })
+  } catch {
+    throw new GigaChatError('Браузер не скачал картинку GigaChat')
+  }
+}
+
+function bytesToDataUrl(bytes: Uint8Array): string {
+  let binary = ''
+  const size = 0x8000
+  for (let index = 0; index < bytes.length; index += size) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + size))
+  }
+  return `data:image/jpeg;base64,${btoa(binary)}`
 }
 
 function modelOf(settings: Settings, tier: 'smart' | 'fast'): string {

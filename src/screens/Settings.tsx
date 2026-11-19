@@ -15,7 +15,7 @@ const DIRECTIONS: { id: Direction; label: string; hint: string }[] = [
 ]
 
 const IMAGE_SOURCES: { id: ImageSource; label: string; hint: string }[] = [
-  { id: 'smart', label: 'Фото + рисунок', hint: 'Конкретные слова получают бесплатное фото. Абстрактные рисует Kandinsky, если ниже указаны его ключи: около 100 картинок в месяц. Без ключей абстрактные тоже получают фото.' },
+  { id: 'smart', label: 'Фото + рисунок', hint: 'При импорте все слова получают бесплатное фото. Рисунок GigaChat появляется только по кнопке «Нарисовать в GigaChat» на карточке.' },
   { id: 'photo', label: 'Только фото', hint: 'Бесплатно и быстро: фото ищется по самому слову в открытых библиотеках Openverse и Wikimedia. Если не подошло, в карточке можно вписать другой запрос.' },
   { id: 'off', label: 'Без картинок', hint: 'Карточки без картинок. Свою можно добавить вручную в редактировании.' },
 ]
@@ -178,7 +178,7 @@ export function Settings() {
             placeholder="Secret из FusionBrain"
           />
         </label>
-        <p className="hint">Два ключа из кабинета FusionBrain. В режиме «Фото + рисунок» Kandinsky рисует только абстрактные слова, около 100 картинок в месяц. Оба ключа остаются в этом браузере и в файл колоды не попадают.</p>
+        <p className="hint">FusionBrain больше не отвечает. Абстрактные слова рисует GigaChat. Эти два поля можно не заполнять.</p>
         <div className="row-actions">
           <button
             className="ghost"

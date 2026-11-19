@@ -6,8 +6,7 @@ import { allCards, allTexts, clearCards, deleteCard, deleteCards, deleteText, pu
 import { mergeByRecency, normalizeCard, normalizeText, parseDeckFile, serializeDeck } from './lib/deckFile'
 import { lastBackup, requestPersistence, saveBackup } from './lib/storage'
 import { todayKey } from './lib/format'
-import { enrich, localImagePrompt } from './lib/gemini'
-import { artistFor, drawKandinsky, hasKandinskyKeys, kandinskyQuotaHit, KandinskyQuotaError, rememberKandinskyQuota, type ArtistChoice } from './lib/kandinsky'
+import { enrich } from './lib/gemini'
 import { findPhoto } from './lib/photos'
 import { loadSettings, saveSettings } from './lib/settings'
 import { starterTexts } from './lib/starter'
@@ -272,13 +271,10 @@ export function DeckProvider({ children }: { children: ReactNode }) {
       remember(mergeCards(cardsRef.current, skeletons))
 
       let failedImages = 0
-      let quotaNote = ''
       if (currentSettings.imageSource !== 'off') {
-        const drawsSome = skeletons.some((card) => wantsDrawing(card, currentSettings))
-        const drawsKandinsky = drawsSome && hasKandinskyKeys(currentSettings)
         let done = 0
         let next = 0
-        const label = drawsKandinsky ? 'Рисую в Kandinsky' : 'Ищу фото'
+        const label = 'Ищу фото'
         setJob({ phase: 'images', done: 0, total: skeletons.length, message: `${label}…` })
         const worker = async () => {
           while (next < skeletons.length) {
@@ -289,7 +285,7 @@ export function DeckProvider({ children }: { children: ReactNode }) {
               continue
             }
             try {
-              const picture = await pictureFor(skeletons[index], currentSettings)
+              const picture = await findPhoto(skeletons[index].term)
               if (picture) {
                 const latest = cardsRef.current.find((card) => card.id === skeletons[index].id) ?? skeletons[index]
                 skeletons[index] = {
@@ -311,10 +307,9 @@ export function DeckProvider({ children }: { children: ReactNode }) {
           }
         }
         await Promise.all(Array.from({ length: Math.min(PHOTO_PARALLEL, skeletons.length) }, worker))
-        if (drawsSome && hasKandinskyKeys(currentSettings) && kandinskyQuotaHit()) quotaNote = ' Лимит Kandinsky на этот месяц кончился, взял фото.'
       }
 
-      const imageNote = (failedImages ? ` Без картинки: ${failedImages}.` : '') + quotaNote
+      const imageNote = failedImages ? ` Без картинки: ${failedImages}.` : ''
       const dupeNote = dupes ? ` Пропустил дубли: ${dupes}.` : ''
       const retryNote = retry.length ? ` Перевод дописан: ${retry.length}.` : ''
       const explainNote = explain.length ? ` Объяснение дописано: ${explain.length}.` : ''
@@ -361,8 +356,8 @@ export function DeckProvider({ children }: { children: ReactNode }) {
       let next = applyEnrich(base, enriched)
       await updateCard(next)
       if (!next.image && settingsRef.current.imageSource !== 'off') {
-        setJob({ phase: 'images', done: 0, total: 1, message: wantsDrawing(next, settingsRef.current) ? 'Рисую картинку…' : 'Ищу фото…' })
-        const picture = await pictureFor(next, settingsRef.current)
+        setJob({ phase: 'images', done: 0, total: 1, message: 'Ищу фото…' })
+        const picture = await findPhoto(next.term)
         if (picture) {
           const latest = cardsRef.current.find((item) => item.id === id) ?? next
           next = {
@@ -497,25 +492,3 @@ function mergeCards(current: Card[], updates: Card[]): Card[] {
 }
 
 const PHOTO_PARALLEL = 4
-
-function wantsDrawing(card: Card, settings: Settings): boolean {
-  return settings.imageSource === 'smart' && card.abstract
-}
-
-/** Kandinsky for an abstract word, otherwise a found photo. */
-async function pictureFor(card: Card, settings: Settings): Promise<{ image: string; credit: string } | null> {
-  const choice: ArtistChoice = {
-    wantsDrawing: wantsDrawing(card, settings),
-    hasKandinsky: hasKandinskyKeys(settings),
-    kandinskyBlocked: kandinskyQuotaHit(),
-  }
-  if (artistFor(choice) === 'kandinsky') {
-    try {
-      const image = await drawKandinsky(card.imagePrompt || localImagePrompt(card.term, card.sentence), settings)
-      return { image, credit: 'Kandinsky' }
-    } catch (error) {
-      if (error instanceof KandinskyQuotaError) rememberKandinskyQuota()
-    }
-  }
-  return findPhoto(card.term)
-}

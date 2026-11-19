@@ -39,7 +39,7 @@ function ensureCert(ips) {
   }
   const result = spawnSync(
     'powershell.exe',
-    ['-NoProfile', '-File', path.join(here, 'issue-cert.ps1'), '-Pfx', pfx, '-Cer', cer, '-Pass', PFX_PASS, '-Dns', names.join(',')],
+    ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(here, 'issue-cert.ps1'), '-Pfx', pfx, '-Cer', cer, '-Pass', PFX_PASS, '-Dns', names.join(',')],
     { encoding: 'utf8' },
   )
   if (result.status !== 0) {

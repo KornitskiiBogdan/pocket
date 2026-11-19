@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { basicAuthorization, contentFrom, directAccessToken, expiryMs, proxyTokenUrl } from './gigachat'
+import { basicAuthorization, contentFrom, directAccessToken, expiryMs, imageIdFrom, proxyTokenUrl } from './gigachat'
 import { DEFAULT_SETTINGS, textModel } from './settings'
 
 describe('basicAuthorization', () => {
@@ -15,6 +15,13 @@ describe('directAccessToken', () => {
     expect(directAccessToken('eyJhbGci.payload.sig')).toBe('eyJhbGci.payload.sig')
     expect(directAccessToken('Bearer eyJhbGci.payload.sig')).toBe('eyJhbGci.payload.sig')
     expect(directAccessToken('NmYwYjEyOTE')).toBeNull()
+  })
+})
+
+describe('imageIdFrom', () => {
+  it('reads the picture id from the model reply', () => {
+    expect(imageIdFrom('<img src="b28fbd4f-105a-43e0-ba5a-2faa80b1f43c" fuse="true"/>')).toBe('b28fbd4f-105a-43e0-ba5a-2faa80b1f43c')
+    expect(imageIdFrom('нет картинки')).toBeNull()
   })
 })
 
