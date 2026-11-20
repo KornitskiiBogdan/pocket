@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { parseJson } from './gemini'
 import { DEFAULT_SETTINGS, textModel } from './settings'
 import { hasYandex, modelUri } from './yandex'
 import type { Settings } from '../types'
@@ -14,6 +15,15 @@ describe('textModel', () => {
 describe('modelUri', () => {
   it('builds a Yandex model address from the folder and the model name', () => {
     expect(modelUri('b1gfolder', 'aliceai-llm-flash')).toBe('gpt://b1gfolder/aliceai-llm-flash')
+  })
+})
+
+describe('parseJson', () => {
+  it('reads JSON when the model wraps it in prose', () => {
+    expect(parseJson('Вот текст:\n```json\n{"title":"Work","paragraphs":["One"]}\n```')).toEqual({
+      title: 'Work',
+      paragraphs: ['One'],
+    })
   })
 })
 

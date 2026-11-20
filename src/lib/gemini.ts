@@ -244,12 +244,25 @@ function blend(item: { term: string; sentence: string }, raw: unknown): Enriched
 
 async function generate(settings: Settings, prompt: string, schema: object | null, tier: 'smart' | 'fast' = 'smart'): Promise<string> {
   const model = textModel(tier === 'fast' ? settings.fastModel : settings.textModel, tier === 'fast' ? DEFAULT_SETTINGS.fastModel : DEFAULT_SETTINGS.textModel)
-  return complete(prompt, settings, model, schema)
+  try {
+    return await complete(prompt, settings, model, schema)
+  } catch (error) {
+    const fast = textModel(settings.fastModel, DEFAULT_SETTINGS.fastModel)
+    if (tier === 'fast' || model === fast) throw error
+    return complete(prompt, settings, fast, schema)
+  }
 }
 
-function parseJson(text: string): unknown {
+export function parseJson(text: string): unknown {
   const clean = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')
-  return JSON.parse(clean)
+  try {
+    return JSON.parse(clean)
+  } catch {
+    const start = clean.search(/[{[]/)
+    const end = Math.max(clean.lastIndexOf('}'), clean.lastIndexOf(']'))
+    if (start >= 0 && end > start) return JSON.parse(clean.slice(start, end + 1))
+    throw new Error('Яндекс прислал не json')
+  }
 }
 
 function clip(value: unknown, max: number): string {

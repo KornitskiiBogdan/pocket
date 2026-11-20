@@ -1,5 +1,6 @@
 // Cloud Function: Node.js, timeout 60 seconds, public invoker. The phone calls this URL.
 const COMPLETION_URL = 'https://llm.api.cloud.yandex.net/foundationModels/v1/completion'
+const IMAGE_SYNC_URL = 'https://ai.api.cloud.yandex.net/v1/images/generations'
 const IMAGE_URL = 'https://llm.api.cloud.yandex.net/foundationModels/v1/imageGenerationAsync'
 const OPERATION_URL = 'https://llm.api.cloud.yandex.net/operations/'
 
@@ -72,24 +73,48 @@ async function complete(apiKey, folderId, request) {
 }
 
 async function draw(apiKey, folderId, prompt) {
+  const text = prompt.slice(0, 500)
+  const modelUri = `art://${folderId}/aliceai-image-art-3.0`
+  try {
+    return await drawSync(apiKey, modelUri, text)
+  } catch (error) {
+    if (error instanceof Error && /не подош|нет доступа/i.test(error.message)) throw error
+    return drawAsync(apiKey, modelUri, text)
+  }
+}
+
+async function drawSync(apiKey, modelUri, prompt) {
+  const response = await fetch(IMAGE_SYNC_URL, {
+    method: 'POST',
+    headers: auth(apiKey),
+    body: JSON.stringify({ model: modelUri, prompt, n: 1, size: '1024x1024', response_format: 'b64_json' }),
+  })
+  const body = await readJson(response)
+  if (!response.ok) throw new Error(yandexMessage(response.status, body, true))
+  const image = body?.data?.[0]?.b64_json
+  if (typeof image !== 'string' || !image) throw new Error('Яндекс не прислал картинку')
+  return image
+}
+
+async function drawAsync(apiKey, modelUri, prompt) {
   const started = await fetch(IMAGE_URL, {
     method: 'POST',
     headers: auth(apiKey),
     body: JSON.stringify({
-      modelUri: `art://${folderId}/yandex-art/latest`,
+      modelUri,
       generationOptions: { aspectRatio: { widthRatio: '1', heightRatio: '1' } },
-      messages: [{ weight: '1', text: prompt.slice(0, 900) }],
+      messages: [{ weight: '1', text: prompt }],
     }),
   })
   const operation = await readJson(started)
-  if (!started.ok) throw new Error(yandexMessage(started.status, operation))
+  if (!started.ok) throw new Error(yandexMessage(started.status, operation, true))
   const id = operation.id
   if (!id) throw new Error('Яндекс не принял рисунок')
-  for (let attempt = 0; attempt < 20; attempt += 1) {
+  for (let attempt = 0; attempt < 12; attempt += 1) {
     await wait(attempt === 0 ? 1500 : 2000)
     const response = await fetch(`${OPERATION_URL}${id}`, { headers: auth(apiKey) })
     const body = await readJson(response)
-    if (!response.ok) throw new Error(yandexMessage(response.status, body))
+    if (!response.ok) throw new Error(yandexMessage(response.status, body, true))
     if (body.done) {
       const image = body.response?.image
       if (typeof image !== 'string' || !image) throw new Error('Яндекс не прислал картинку')
@@ -112,11 +137,17 @@ async function readJson(response) {
   }
 }
 
-function yandexMessage(status, body) {
-  if (status === 401 || status === 403) return 'Ключ Яндекса не подошёл'
-  if (status === 429) return 'Яндекс занят или грант закончился'
+function yandexMessage(status, body, image = false) {
   const message = body?.error?.message || body?.message
-  return typeof message === 'string' && message.trim() ? message.slice(0, 300) : 'Яндекс не ответил'
+  const detail = typeof message === 'string' && message.trim() ? message.trim().slice(0, 240) : ''
+  if (status === 401) return 'Ключ Яндекса не подошёл'
+  if (status === 403) {
+    return image
+      ? 'Нет доступа к рисункам. У ключа нужна область yc.ai.imageGeneration.execute, у сервисного аккаунта — роль ai.imageGeneration.user.'
+      : detail || 'Ключ Яндекса не подошёл'
+  }
+  if (status === 429) return 'Яндекс занят или грант закончился'
+  return detail || 'Яндекс не ответил'
 }
 
 function wait(ms) {
